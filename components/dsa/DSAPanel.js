@@ -2,372 +2,766 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import {
   X, Binary, Play, Pause, SkipBack, SkipForward,
-  ChevronRight, Loader2, RotateCcw, Search,
+  Loader2, RotateCcw, Sparkles, Layers, Maximize2, Minimize2,
+  AlertCircle, CheckCircle2,
 } from "lucide-react";
 import useCanvasStore from "@/store/useCanvasStore";
 import { parseInput } from "@/lib/dsa/parsers";
 import { layoutDSA } from "@/lib/dsa/layout";
-import { binarySearchSteps, bubbleSortSteps, linearSearchSteps } from "@/lib/dsa/algorithms";
+import toast from "react-hot-toast";
 
+// ── Constants ─────────────────────────────────────────
 const DSA_STRUCTS = [
-  { id: "array",   label: "1D Array",     icon: "▦" },
-  { id: "array2d", label: "2D Matrix",    icon: "▩" },
-  { id: "list",    label: "Linked List",  icon: "⊞→" },
-  { id: "stack",   label: "Stack",        icon: "⊟" },
-  { id: "queue",   label: "Queue",        icon: "⊡" },
-  { id: "tree",    label: "BST / Tree",   icon: "⊕" },
-  { id: "heap",    label: "Heap",         icon: "△" },
-  { id: "graph",   label: "Graph",        icon: "◎" },
-  { id: "string",  label: "String",       icon: "Aa" },
+  { id: "array",   label: "1D Array",    icon: "▦" },
+  { id: "array2d", label: "2D Matrix",   icon: "▩" },
+  { id: "list",    label: "Linked List", icon: "⊞→" },
+  { id: "stack",   label: "Stack",       icon: "⊟" },
+  { id: "queue",   label: "Queue",       icon: "⊡" },
+  { id: "tree",    label: "BST / Tree",  icon: "⊕" },
+  { id: "heap",    label: "Heap",        icon: "△" },
+  { id: "graph",   label: "Graph",       icon: "◎" },
+  { id: "string",  label: "String",      icon: "Aa" },
 ];
 
-const PLACEHOLDERS = {
-  array:   "1 2 3 4 5  or  [1,2,3,4,5]",
-  array2d: "[[1,2,3],[4,5,6],[7,8,9]]",
-  list:    "1 2 3 4  or  1->2->3->4",
-  stack:   "1 2 3 4  (top = last)",
-  queue:   "1 2 3 4  (front = first)",
-  tree:    "50 30 70 20 40 60 80",
-  heap:    "90 80 70 60 50",
-  graph:   "A-B\nA-C\nB-D:5\nC-D:3",
-  string:  "HELLO",
+const PROGRAMMING_LANGUAGES = [
+  { id: "cpp",        name: "C++" },
+  { id: "python",     name: "Python" },
+  { id: "java",       name: "Java" },
+  { id: "javascript", name: "JavaScript" },
+  { id: "c",          name: "C" },
+  { id: "typescript", name: "TypeScript" },
+  { id: "rust",       name: "Rust" },
+  { id: "go",         name: "Go" },
+  { id: "csharp",     name: "C#" },
+];
+
+// Example snippets only shown when the editor is empty
+const EXAMPLE_SNIPPETS = [
+  {
+    label: "Two Sum (C++)",
+    language: "cpp",
+    code: `#include <vector>
+#include <unordered_map>
+using namespace std;
+
+vector<int> twoSum(vector<int>& nums, int target) {
+    unordered_map<int,int> mp;
+    for (int i = 0; i < nums.size(); i++) {
+        int need = target - nums[i];
+        if (mp.count(need)) return {mp[need], i};
+        mp[nums[i]] = i;
+    }
+    return {};
+}
+// nums = {2, 7, 11, 15}  target = 9`,
+  },
+  {
+    label: "Binary Search (Python)",
+    language: "python",
+    code: `def binary_search(arr, target):
+    low, high = 0, len(arr) - 1
+    while low <= high:
+        mid = (low + high) // 2
+        if arr[mid] == target:
+            return mid
+        elif arr[mid] < target:
+            low = mid + 1
+        else:
+            high = mid - 1
+    return -1
+
+arr = [2, 5, 8, 12, 16, 23, 38, 56, 72, 91]
+result = binary_search(arr, 23)`,
+  },
+  {
+    label: "Valid Parentheses (Java)",
+    language: "java",
+    code: `import java.util.Stack;
+
+public boolean isValid(String s) {
+    Stack<Character> stack = new Stack<>();
+    for (char c : s.toCharArray()) {
+        if (c == '(' || c == '{' || c == '[') {
+            stack.push(c);
+        } else {
+            if (stack.isEmpty()) return false;
+            char top = stack.pop();
+            if (c == ')' && top != '(') return false;
+            if (c == '}' && top != '{') return false;
+            if (c == ']' && top != '[') return false;
+        }
+    }
+    return stack.isEmpty();
+}
+// Input: "{[()]}"`,
+  },
+  {
+    label: "BFS Graph (Python)",
+    language: "python",
+    code: `from collections import deque
+
+def bfs(graph, start):
+    visited = set([start])
+    queue = deque([start])
+    order = []
+    while queue:
+        node = queue.popleft()
+        order.append(node)
+        for nb in graph.get(node, []):
+            if nb not in visited:
+                visited.add(nb)
+                queue.append(nb)
+    return order
+
+graph = {1:[2,3], 2:[1,3], 3:[1,2,4], 4:[3]}
+bfs(graph, 1)`,
+  },
+  {
+    label: "Bubble Sort (Python)",
+    language: "python",
+    code: `def bubble_sort(arr):
+    n = len(arr)
+    for i in range(n):
+        for j in range(n - i - 1):
+            if arr[j] > arr[j+1]:
+                arr[j], arr[j+1] = arr[j+1], arr[j]
+    return arr
+
+nums = [64, 34, 25, 12, 22, 11]
+bubble_sort(nums)`,
+  },
+  {
+    label: "BST Traversal (Python)",
+    language: "python",
+    code: `def inorder(root, res=[]):
+    if not root:
+        return res
+    inorder(root.left, res)
+    res.append(root.val)
+    inorder(root.right, res)
+    return res
+
+# Tree: 50 30 70 20 40 60 80`,
+  },
+];
+
+const STRUCT_TYPE_LABELS = {
+  array: "1D Array",
+  array2d: "2D Matrix",
+  list: "Linked List",
+  stack: "Stack",
+  queue: "Queue",
+  tree: "BST / Tree",
+  heap: "Heap",
+  graph: "Graph",
+  heap: "Heap",
+  string: "String",
 };
 
-const ALGORITHMS_FOR = {
-  array:  ["Binary Search", "Linear Search", "Bubble Sort"],
-  list:   ["Linear Search"],
-  tree:   ["BST Search", "BST Insert"],
-  heap:   [],
-  graph:  [],
-  stack:  [],
-  queue:  [],
-  string: ["Linear Search"],
-  array2d:[], 
+const HIGHLIGHT_COLORS = {
+  "#6366f1": "Active",
+  "#f59e0b": "Comparing",
+  "#10b981": "Found",
+  "#ef4444": "Removed",
 };
 
+// ── Main Component ─────────────────────────────────────
 export default function DSAPanel({ onClose, onBroadcastBatch }) {
-  const [selected, setSelected] = useState("array");
-  const [input, setInput] = useState("");
-  const [error, setError] = useState("");
-  const [visualized, setVisualized] = useState(false);
-  const [loading, setLoading] = useState(false);
+  // Panel mode
+  const [panelTab, setPanelTab] = useState("code");
 
-  // Algorithm dry-run
-  const [algoMode, setAlgoMode] = useState(false);
-  const [selectedAlgo, setSelectedAlgo] = useState("");
-  const [algoInput, setAlgoInput] = useState(""); // e.g. target value
+  // Resizable panel
+  const [panelWidth, setPanelWidth] = useState(420);
+  const [isResizing, setIsResizing] = useState(false);
+  const resizeRef = useRef({ startX: 0, startW: 420 });
+
+  // Manual builder state
+  const [selected, setSelected] = useState("array");
+  const [manualInput, setManualInput] = useState("");
+  const [graphDirected, setGraphDirected] = useState(false);
+  const [graphWeighted, setGraphWeighted] = useState(false);
+  const [manualError, setManualError] = useState("");
+  const [manualLoading, setManualLoading] = useState(false);
+
+  // Code dry-run state
+  const [codeLang, setCodeLang] = useState("cpp");
+  const [codeText, setCodeText] = useState("");
+  const [codeError, setCodeError] = useState("");
+  const [analyzing, setAnalyzing] = useState(false);
+  const [retryable, setRetryable] = useState(false);
+  const [analysisResult, setAnalysisResult] = useState(null);
+  const [createdEls, setCreatedEls] = useState([]);
+
+  // Stepper state
   const [steps, setSteps] = useState([]);
   const [stepIdx, setStepIdx] = useState(0);
   const [playing, setPlaying] = useState(false);
-  const playRef = useRef(null);
+  const [playSpeed, setPlaySpeed] = useState(1);
+  const playerRef = useRef(null);
 
-  const { addElements, highlightElements, clearHighlights, elements } = useCanvasStore();
+  const { addElements, highlightElements, clearHighlights } = useCanvasStore();
 
-  /* ── Visualize structure ─────────────────────── */
-  const handleVisualize = () => {
-    if (!input.trim()) { setError("Enter some data first"); return; }
-    setError("");
-    setLoading(true);
+  // ── Resize Logic ─────────────────────────────────────
+  useEffect(() => {
+    if (!isResizing) return;
+    const onMove = (e) => {
+      const delta = resizeRef.current.startX - e.clientX;
+      const next = Math.min(Math.max(340, resizeRef.current.startW + delta), window.innerWidth - 80);
+      setPanelWidth(next);
+    };
+    const onUp = () => setIsResizing(false);
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    return () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+  }, [isResizing]);
 
+  // ── Canvas: render structure ───────────────────────
+  const renderOnCanvas = useCallback((structType, inputData, options = {}) => {
+    const parsed = parseInput(structType, inputData, options);
+    const existing = useCanvasStore.getState().elements;
+    let originY = 80;
+    if (existing.length > 0) {
+      const maxY = Math.max(...existing.map((el) => {
+        const y2 = el.data?.y2 ?? (el.y + (el.height || 0));
+        return Math.max(el.y + (el.height || 0), y2);
+      }));
+      originY = maxY + 60;
+    }
+    const raw = layoutDSA(structType, parsed.data, { x: 80, y: originY });
+    const gid = `dsa-${structType}-${Date.now()}`;
+    const els = raw.map((el) => ({ ...el, groupId: gid }));
+    addElements(els);
+    onBroadcastBatch?.(useCanvasStore.getState().elements);
+    return els;
+  }, [addElements, onBroadcastBatch]);
+
+  // ── Manual Visualize ───────────────────────────────
+  const handleManualVisualize = () => {
+    if (!manualInput.trim()) { setManualError("Enter data first"); return; }
+    setManualError("");
+    setManualLoading(true);
     try {
-      const parsed = parseInput(selected, input);
-
-      // Find free space below all existing elements so the new structure
-      // doesn't overlap anything already on the canvas
-      const existing = useCanvasStore.getState().elements;
-      let originY = 80;
-      if (existing.length > 0) {
-        const maxBottom = Math.max(
-          ...existing.map((el) => {
-            const y2 = el.data?.y2 ?? (el.y + (el.height || 0));
-            return Math.max(el.y + (el.height || 0), y2);
-          })
-        );
-        originY = maxBottom + 60; // 60px gap below existing content
-      }
-
-      const rawEls = layoutDSA(selected, parsed.data, { x: 80, y: originY });
-
-      // Stamp every element with a shared groupId so clicking any part
-      // of this structure selects and moves the whole thing together
-      const dsaGroupId = `dsa-${selected}-${Date.now()}`;
-      const canvasEls = rawEls.map((el) => ({ ...el, groupId: dsaGroupId }));
-
-      // Append — don't clear existing elements
-      addElements(canvasEls);
-
-      // Broadcast the full updated canvas to collaborators
-      onBroadcastBatch?.(useCanvasStore.getState().elements);
-
-      setVisualized(true);
-      setAlgoMode(false);
+      const els = renderOnCanvas(selected, manualInput, {
+        directed: graphDirected,
+        weighted: graphWeighted,
+      });
+      setCreatedEls(els);
       setSteps([]);
       setStepIdx(0);
+      toast.success(`${STRUCT_TYPE_LABELS[selected] || selected} drawn on canvas`);
     } catch (e) {
-      setError(e.message || "Invalid input");
+      setManualError(e.message || "Invalid input");
     } finally {
-      setLoading(false);
+      setManualLoading(false);
     }
   };
 
-  /* ── Run algorithm ───────────────────────────── */
-  const handleRunAlgo = () => {
-    if (!algoInput.trim() && selectedAlgo !== "Bubble Sort") {
-      setError("Enter a target value for the algorithm");
-      return;
-    }
-    setError("");
+  // ── AI Code Analysis ───────────────────────────────
+  const handleAnalyze = async () => {
+    if (!codeText.trim()) { setCodeError("Paste your algorithm code first"); return; }
+    setCodeError("");
+    setRetryable(false);
+    setAnalyzing(true);
+    setPlaying(false);
+    setSteps([]);
+    setStepIdx(0);
+    setAnalysisResult(null);
 
     try {
-      const values = input.trim()
-        .replace(/[\[\]()]/g, "")
-        .split(/[\s,]+/)
-        .map((t) => t.trim())
-        .filter(Boolean)
-        .map(Number);
+      const res = await fetch("/api/dsa/code-dryrun", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: codeText, language: codeLang }),
+      });
+      const data = await res.json();
 
-      let newSteps = [];
-      const target = Number(algoInput);
-
-      if (selectedAlgo === "Binary Search") {
-        newSteps = binarySearchSteps([...values].sort((a, b) => a - b), target);
-      } else if (selectedAlgo === "Linear Search") {
-        newSteps = linearSearchSteps(values, target);
-      } else if (selectedAlgo === "Bubble Sort") {
-        newSteps = bubbleSortSteps(values);
+      if (!res.ok) {
+        setRetryable(data.retryable === true);
+        throw new Error(data.error || "Analysis failed");
+      }
+      if (!data.structureType || !data.initialInput || !Array.isArray(data.steps) || data.steps.length === 0) {
+        throw new Error("AI returned incomplete result — please try again");
       }
 
-      setSteps(newSteps);
+      // Draw detected structure on canvas
+      const els = renderOnCanvas(
+        data.structureType,
+        data.initialInput,
+        data.graphOptions || {}
+      );
+      setCreatedEls(els);
+      setAnalysisResult(data);
+      setSteps(data.steps);
       setStepIdx(0);
-      setAlgoMode(true);
+      toast.success(`Detected: ${STRUCT_TYPE_LABELS[data.structureType] || data.structureType}`);
     } catch (e) {
-      setError(e.message || "Could not run algorithm");
+      setCodeError(e.message || "Analysis failed");
+      toast.error(e.message || "Analysis failed");
+    } finally {
+      setAnalyzing(false);
     }
   };
 
-  /* ── Apply highlights for current step ────────── */
-  useEffect(() => {
-    if (!algoMode || !steps.length) return;
-    const step = steps[stepIdx];
-    if (step?.highlights?.length) {
-      highlightElements(
-        elements.slice(0, step.highlights.length).map((el) => el.id),
-        step.found ? "#10b981" : step.notFound ? "#ef4444" : "#f59e0b"
+  // ── Highlight matching ─────────────────────────────
+  const syncHighlight = useCallback((step, els) => {
+    if (!step || !els.length) { clearHighlights(); return; }
+    const highlights = step.highlights || [];
+    if (!highlights.length) { clearHighlights(); return; }
+
+    const ids = [];
+    highlights.forEach((hl) => {
+      // Try index match first
+      const asNum = Number(hl);
+      if (!isNaN(asNum)) {
+        const byIdx = els.find((e) => e.data?.index === asNum);
+        if (byIdx) { ids.push(byIdx.id); return; }
+      }
+      // Try value / label match
+      const byVal = els.find(
+        (e) => String(e.data?.value) === String(hl) || String(e.data?.id) === String(hl)
       );
-    } else {
-      clearHighlights();
-    }
-    // Broadcast updated highlight state to collaborators
-    // Small delay to let the store update first
-    setTimeout(() => {
-      const latest = useCanvasStore.getState().elements;
-      onBroadcastBatch?.(latest);
-    }, 0);
-  }, [stepIdx, algoMode, steps]);
+      if (byVal) { ids.push(byVal.id); return; }
+      // Positional fallback for arrays
+      if (!isNaN(asNum) && els[asNum]) {
+        ids.push(els[asNum].id);
+      }
+    });
 
-  /* ── Auto-play ──────────────────────────────── */
+    if (ids.length) highlightElements(ids, step.highlightColor || "#6366f1");
+    else clearHighlights();
+  }, [highlightElements, clearHighlights]);
+
   useEffect(() => {
-    if (!playing) { clearInterval(playRef.current); return; }
-    playRef.current = setInterval(() => {
-      setStepIdx((i) => {
-        if (i >= steps.length - 1) { setPlaying(false); return i; }
-        return i + 1;
-      });
-    }, 900);
-    return () => clearInterval(playRef.current);
-  }, [playing, steps.length]);
+    if (steps.length) syncHighlight(steps[stepIdx], createdEls);
+    return () => clearHighlights();
+  }, [stepIdx, steps, createdEls, syncHighlight, clearHighlights]);
 
-  const algos = ALGORITHMS_FOR[selected] ?? [];
+  // ── Auto-play ──────────────────────────────────────
+  useEffect(() => {
+    clearInterval(playerRef.current);
+    if (!playing || !steps.length) return;
+    const interval = Math.max(300, 1400 / playSpeed);
+    playerRef.current = setInterval(() => {
+      setStepIdx((p) => {
+        if (p >= steps.length - 1) { setPlaying(false); return p; }
+        return p + 1;
+      });
+    }, interval);
+    return () => clearInterval(playerRef.current);
+  }, [playing, steps.length, playSpeed]);
+
+  const curStep = steps[stepIdx];
+  const codeLines = codeText.split("\n");
 
   return (
     <div
       id="dsa-panel"
       style={{
-        position: "absolute", top: 0, right: 0, bottom: 0, width: 280,
+        position: "absolute",
+        top: 0, right: 0, bottom: 0,
+        width: panelWidth,
         background: "var(--bg-elevated)",
         borderLeft: "1px solid var(--border-color)",
-        zIndex: 30, display: "flex", flexDirection: "column",
-        boxShadow: "-4px 0 24px rgba(0,0,0,0.15)",
+        zIndex: 30,
+        display: "flex",
+        flexDirection: "column",
+        boxShadow: "-4px 0 28px rgba(0,0,0,0.18)",
+        boxSizing: "border-box",
       }}
     >
-      {/* Header */}
-      <div style={{ padding: "14px 14px 12px", borderBottom: "1px solid var(--border-color)", display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-        <div style={{ width: 28, height: 28, background: "linear-gradient(135deg,#6366f1,#8b5cf6)", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <Binary size={14} style={{ color: "white" }} />
-        </div>
-        <span style={{ fontWeight: 700, fontSize: "0.95rem", flex: 1 }}>DSA Lab</span>
-        <button onClick={onClose} id="dsa-close" style={ghostBtn} aria-label="Close"><X size={14} /></button>
+      {/* ── Resize Handle ── */}
+      <div
+        onMouseDown={(e) => {
+          e.preventDefault();
+          resizeRef.current = { startX: e.clientX, startW: panelWidth };
+          setIsResizing(true);
+        }}
+        id="dsa-resize-handle"
+        style={{
+          position: "absolute", top: 0, left: -4, bottom: 0,
+          width: 8, cursor: "col-resize", zIndex: 40,
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}
+        onMouseEnter={(e) => { e.currentTarget.querySelector(".handle-bar").style.background = "var(--accent)"; }}
+        onMouseLeave={(e) => { if (!isResizing) e.currentTarget.querySelector(".handle-bar").style.background = "var(--border-color)"; }}
+      >
+        <div className="handle-bar" style={{ width: 3, height: 32, background: isResizing ? "var(--accent)" : "var(--border-color)", borderRadius: 3, transition: "background 150ms" }} />
       </div>
 
-      {/* Scrollable body */}
+      {/* ── Header ── */}
+      <div style={{ padding: "11px 14px", borderBottom: "1px solid var(--border-color)", display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+        <div style={{ width: 28, height: 28, background: "linear-gradient(135deg,#6366f1,#8b5cf6)", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <Binary size={14} color="white" />
+        </div>
+        <span style={{ fontWeight: 700, fontSize: "0.93rem", flex: 1 }}>DSA Visualizer</span>
+        <button
+          title={panelWidth > 560 ? "Compact view" : "Wide view"}
+          onClick={() => setPanelWidth((w) => w > 560 ? 420 : 680)}
+          style={ghostBtn}
+        >
+          {panelWidth > 560 ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+        </button>
+        <button id="dsa-close" onClick={onClose} style={ghostBtn} aria-label="Close"><X size={14} /></button>
+      </div>
+
+      {/* ── Tabs ── */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, padding: "6px 8px", borderBottom: "1px solid var(--border-color)", flexShrink: 0, background: "var(--bg-secondary)" }}>
+        {[
+          { id: "code", icon: <Sparkles size={12} />, label: "AI Code Dry Run" },
+          { id: "manual", icon: <Layers size={12} />, label: "Manual Builder" },
+        ].map((t) => (
+          <button
+            key={t.id}
+            id={`tab-${t.id}`}
+            onClick={() => { setPanelTab(t.id); setCodeError(""); setManualError(""); }}
+            style={{
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 5,
+              padding: "6px 8px", borderRadius: 6, fontSize: "0.78rem",
+              fontWeight: panelTab === t.id ? 700 : 500, border: "none", cursor: "pointer",
+              background: panelTab === t.id ? "var(--bg-elevated)" : "transparent",
+              color: panelTab === t.id ? "var(--accent)" : "var(--text-secondary)",
+              boxShadow: panelTab === t.id ? "var(--shadow-sm)" : "none",
+              transition: "all 120ms",
+            }}
+          >
+            {t.icon} {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Scrollable Body ── */}
       <div style={{ flex: 1, overflowY: "auto", padding: "12px" }}>
 
-        {/* Structure selector */}
-        <div style={sLabel}>Structure</div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 5, marginBottom: 14 }}>
-          {DSA_STRUCTS.map((s) => (
-            <button
-              key={s.id}
-              id={`dsa-struct-${s.id}`}
-              onClick={() => { setSelected(s.id); setInput(""); setError(""); setVisualized(false); setAlgoMode(false); setSteps([]); }}
-              style={{
-                display: "flex", alignItems: "center", gap: 6,
-                padding: "7px 9px", borderRadius: 8,
-                border: selected === s.id ? "1px solid var(--accent-border)" : "1px solid var(--border-color)",
-                background: selected === s.id ? "var(--accent-muted)" : "var(--bg-secondary)",
-                color: selected === s.id ? "var(--accent)" : "var(--text-secondary)",
-                fontWeight: selected === s.id ? 600 : 400,
-                fontSize: "0.8rem", cursor: "pointer", transition: "all 100ms",
-              }}
-            >
-              <span style={{ fontSize: "0.9rem" }}>{s.icon}</span>
-              {s.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Input */}
-        <div style={sLabel}>Input Data</div>
-        <textarea
-          value={input}
-          onChange={(e) => { setInput(e.target.value); setError(""); }}
-          placeholder={PLACEHOLDERS[selected]}
-          rows={3}
-          id="dsa-input"
-          style={textareaStyle(error)}
-          onFocus={(e) => { if (!error) e.target.style.borderColor = "var(--accent)"; }}
-          onBlur={(e) => { if (!error) e.target.style.borderColor = "var(--border-color)"; }}
-        />
-        {error && <p style={{ fontSize: "0.75rem", color: "var(--danger)", margin: "4px 0 0" }}>{error}</p>}
-
-        <button
-          onClick={handleVisualize}
-          disabled={loading}
-          id="dsa-visualize-btn"
-          style={{
-            width: "100%", display: "flex", alignItems: "center", justifyContent: "center",
-            gap: 6, padding: "9px", borderRadius: 10, marginTop: 8, marginBottom: 16,
-            background: "linear-gradient(135deg, #6366f1, #8b5cf6)",
-            color: "white", border: "none", cursor: loading ? "not-allowed" : "pointer",
-            fontSize: "0.875rem", fontWeight: 600, opacity: loading ? 0.7 : 1,
-            transition: "all 150ms",
-          }}
-        >
-          {loading
-            ? <><Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> Rendering…</>
-            : <><Binary size={14} /> Visualize</>}
-        </button>
-
-        {/* Algorithm dry-run */}
-        {visualized && algos.length > 0 && (
-          <div style={{ borderTop: "1px solid var(--border-color)", paddingTop: 14 }}>
-            <div style={sLabel}>Algorithm Dry-Run</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 5, marginBottom: 10 }}>
-              {algos.map((algo) => (
-                <button
-                  key={algo}
-                  id={`algo-${algo.replace(/\s+/g, "-").toLowerCase()}`}
-                  onClick={() => { setSelectedAlgo(algo); setAlgoInput(""); setSteps([]); setAlgoMode(false); }}
-                  style={{
-                    padding: "6px 10px", borderRadius: 8, textAlign: "left", fontSize: "0.825rem",
-                    border: selectedAlgo === algo ? "1px solid var(--accent-border)" : "1px solid var(--border-color)",
-                    background: selectedAlgo === algo ? "var(--accent-muted)" : "var(--bg-secondary)",
-                    color: selectedAlgo === algo ? "var(--accent)" : "var(--text-secondary)",
-                    fontWeight: selectedAlgo === algo ? 600 : 400,
-                    cursor: "pointer", transition: "all 100ms",
-                    display: "flex", alignItems: "center", gap: 6,
-                  }}
-                >
-                  <Search size={11} />
-                  {algo}
-                </button>
-              ))}
-            </div>
-
-            {selectedAlgo && selectedAlgo !== "Bubble Sort" && (
-              <input
-                type="text"
-                value={algoInput}
-                onChange={(e) => setAlgoInput(e.target.value)}
-                placeholder={`Target value for ${selectedAlgo}`}
-                id="algo-target-input"
-                style={{ ...textareaStyle(false), padding: "7px 10px", resize: "none", marginBottom: 8 }}
-                onFocus={(e) => { e.target.style.borderColor = "var(--accent)"; }}
-                onBlur={(e) => { e.target.style.borderColor = "var(--border-color)"; }}
-              />
-            )}
-
-            {selectedAlgo && (
-              <button
-                onClick={handleRunAlgo}
-                id="run-algo-btn"
+        {/* ═══ TAB 1: AI CODE DRY RUN ═══════════════════ */}
+        {panelTab === "code" && (
+          <div>
+            {/* Language selector row */}
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+              <span style={{ fontSize: "0.72rem", fontWeight: 600, color: "var(--text-tertiary)", textTransform: "uppercase", flexShrink: 0 }}>Language:</span>
+              <select
+                id="code-lang-select"
+                value={codeLang}
+                onChange={(e) => setCodeLang(e.target.value)}
                 style={{
-                  width: "100%", display: "flex", alignItems: "center", justifyContent: "center",
-                  gap: 6, padding: "8px", borderRadius: 10, marginBottom: 12,
-                  background: "var(--bg-tertiary)", color: "var(--text-primary)",
-                  border: "1px solid var(--border-color)", cursor: "pointer",
-                  fontSize: "0.85rem", fontWeight: 500,
+                  padding: "4px 8px", borderRadius: 6, fontSize: "0.8rem", fontWeight: 600,
+                  background: "var(--bg-secondary)", color: "var(--accent)",
+                  border: "1px solid var(--border-color)", outline: "none", cursor: "pointer",
                 }}
               >
-                <Play size={12} /> Run {selectedAlgo}
-              </button>
+                {PROGRAMMING_LANGUAGES.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+              </select>
+              <span style={{ fontSize: "0.68rem", color: "var(--text-tertiary)", marginLeft: "auto" }}>Max 15 elements</span>
+            </div>
+
+            {/* Example snippet pills */}
+            <div style={{ marginBottom: 8 }}>
+              <div style={{ fontSize: "0.68rem", color: "var(--text-tertiary)", marginBottom: 4 }}>Examples (click to load):</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                {EXAMPLE_SNIPPETS.map((s) => (
+                  <button
+                    key={s.label}
+                    onClick={() => {
+                      setCodeLang(s.language);
+                      setCodeText(s.code);
+                      setCodeError("");
+                      setAnalysisResult(null);
+                      setSteps([]);
+                    }}
+                    style={{
+                      ...badgeBtn,
+                      background: codeText === s.code ? "var(--accent-muted)" : "var(--bg-secondary)",
+                      borderColor: codeText === s.code ? "var(--accent)" : "var(--border-color)",
+                      color: codeText === s.code ? "var(--accent)" : "var(--text-secondary)",
+                      fontWeight: codeText === s.code ? 600 : 400,
+                    }}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Hint text */}
+            <div style={{ marginBottom: 6, padding: "8px 10px", background: "var(--bg-secondary)", borderRadius: 8, border: "1px solid var(--border-subtle)" }}>
+              <div style={{ fontSize: "0.72rem", color: "var(--text-tertiary)", lineHeight: 1.5 }}>
+                <strong style={{ color: "var(--text-primary)" }}>Write any algorithm</strong> — the AI automatically detects which data structure your code uses (array, graph, tree, stack, queue, etc.) and builds the correct visualization.
+              </div>
+            </div>
+
+            {/* Code textarea */}
+            <div style={{ marginBottom: 8 }}>
+              <textarea
+                id="code-dryrun-input"
+                value={codeText}
+                onChange={(e) => { setCodeText(e.target.value); setCodeError(""); }}
+                placeholder={`// Paste your algorithm code here in ${PROGRAMMING_LANGUAGES.find(l => l.id === codeLang)?.name || codeLang}.\n// Works with any custom or standard algorithm.`}
+                rows={10}
+                spellCheck={false}
+                style={{
+                  ...codeTextarea,
+                  borderColor: codeError ? "var(--danger)" : "var(--border-color)",
+                }}
+              />
+            </div>
+
+            {codeError && (
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 6, padding: "8px 10px", background: "rgba(239,68,68,0.08)", borderRadius: 7, border: "1px solid rgba(239,68,68,0.2)", marginBottom: 8 }}>
+                <AlertCircle size={13} style={{ color: "var(--danger)", flexShrink: 0, marginTop: 1 }} />
+                <div style={{ fontSize: "0.78rem", color: "var(--danger)", lineHeight: 1.4 }}>
+                  {codeError}
+                  {retryable && <button onClick={handleAnalyze} style={{ marginLeft: 6, fontWeight: 700, background: "none", border: "none", color: "var(--accent)", cursor: "pointer", fontSize: "0.78rem", textDecoration: "underline" }}>Retry</button>}
+                </div>
+              </div>
             )}
 
-            {/* Step player */}
-            {algoMode && steps.length > 0 && (
-              <div style={{ background: "var(--bg-secondary)", borderRadius: 12, padding: 12, border: "1px solid var(--border-color)" }}>
-                {/* Step info */}
-                <div style={{ fontSize: "0.78rem", color: "var(--text-secondary)", marginBottom: 10, minHeight: 48, lineHeight: 1.5 }}>
-                  <span style={{ color: "var(--accent)", fontWeight: 600, fontFamily: "var(--font-mono)", fontSize: "0.72rem" }}>
-                    Step {stepIdx + 1}/{steps.length}
-                  </span>
-                  <br />
-                  {steps[stepIdx]?.description}
-                </div>
+            {/* Analyze button */}
+            <button
+              id="analyze-btn"
+              onClick={handleAnalyze}
+              disabled={analyzing}
+              style={{
+                width: "100%", display: "flex", alignItems: "center", justifyContent: "center",
+                gap: 7, padding: "10px", borderRadius: 10, marginBottom: 14,
+                background: "linear-gradient(135deg, #6366f1, #8b5cf6)",
+                color: "white", border: "none", cursor: analyzing ? "not-allowed" : "pointer",
+                fontSize: "0.875rem", fontWeight: 600, opacity: analyzing ? 0.75 : 1,
+                boxShadow: "0 2px 12px rgba(99,102,241,0.3)",
+                transition: "all 150ms",
+              }}
+            >
+              {analyzing
+                ? <><Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> Analyzing & Building Visualization…</>
+                : <><Sparkles size={14} /> Detect DS & Run Dry Run</>
+              }
+            </button>
 
-                {/* Controls */}
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-                  <button onClick={() => { setStepIdx(0); setPlaying(false); clearHighlights(); }} style={ctrlBtn} id="step-reset" title="Reset">
-                    <RotateCcw size={13} />
-                  </button>
-                  <button onClick={() => setStepIdx((i) => Math.max(0, i - 1))} style={ctrlBtn} id="step-back" title="Previous">
-                    <SkipBack size={14} />
-                  </button>
-                  <button
-                    onClick={() => setPlaying((p) => !p)}
-                    id="step-play-pause"
-                    style={{ ...ctrlBtn, background: "var(--accent)", color: "white", width: 36, height: 36, borderRadius: "50%" }}
-                  >
-                    {playing ? <Pause size={14} /> : <Play size={14} />}
-                  </button>
-                  <button onClick={() => setStepIdx((i) => Math.min(steps.length - 1, i + 1))} style={ctrlBtn} id="step-next" title="Next">
-                    <SkipForward size={14} />
-                  </button>
-                </div>
-
-                {/* Progress bar */}
-                <div style={{ marginTop: 10, height: 3, background: "var(--border-color)", borderRadius: 2, overflow: "hidden" }}>
-                  <div style={{ height: "100%", width: `${((stepIdx + 1) / steps.length) * 100}%`, background: "var(--accent)", transition: "width 200ms" }} />
-                </div>
-
-                {/* Comparisons */}
-                {steps[stepIdx]?.comparisons !== undefined && (
-                  <div style={{ marginTop: 8, fontSize: "0.72rem", color: "var(--text-tertiary)", fontFamily: "var(--font-mono)" }}>
-                    Comparisons: <strong style={{ color: "var(--accent)" }}>{steps[stepIdx].comparisons}</strong>
+            {/* ── Results ── */}
+            {analysisResult && steps.length > 0 && (
+              <div>
+                {/* Summary row */}
+                <div style={{ marginBottom: 10, padding: "8px 10px", background: "var(--bg-secondary)", borderRadius: 9, border: "1px solid var(--border-color)" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 4 }}>
+                    <span style={{ fontWeight: 700, fontSize: "0.88rem", color: "var(--text-primary)" }}>
+                      {analysisResult.algorithmName}
+                    </span>
+                    <div style={{ display: "flex", gap: 4 }}>
+                      <span style={{ fontSize: "0.68rem", padding: "2px 7px", borderRadius: 20, background: "var(--accent-muted)", color: "var(--accent)", fontWeight: 600 }}>
+                        {STRUCT_TYPE_LABELS[analysisResult.structureType] || analysisResult.structureType}
+                      </span>
+                      {analysisResult.complexity?.time && (
+                        <span style={{ fontSize: "0.68rem", padding: "2px 7px", borderRadius: 20, background: "var(--bg-tertiary)", color: "var(--text-secondary)", fontWeight: 600, border: "1px solid var(--border-color)" }}>
+                          {analysisResult.complexity.time}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                )}
+                  <div style={{ fontSize: "0.75rem", color: "var(--text-tertiary)", lineHeight: 1.4 }}>
+                    {analysisResult.summary}
+                  </div>
+                </div>
+
+                {/* Code viewer with active line highlight */}
+                <div style={{ marginBottom: 10, borderRadius: 8, border: "1px solid var(--border-color)", overflow: "hidden" }}>
+                  <div style={{ padding: "4px 10px", background: "var(--bg-secondary)", borderBottom: "1px solid var(--border-subtle)", display: "flex", justifyContent: "space-between", fontSize: "0.68rem", color: "var(--text-tertiary)", fontWeight: 600 }}>
+                    <span>Code Trace</span>
+                    <span>{PROGRAMMING_LANGUAGES.find(l => l.id === codeLang)?.name}</span>
+                  </div>
+                  <div style={{ maxHeight: 140, overflowY: "auto", background: "var(--bg-primary)", fontFamily: "var(--font-mono)", fontSize: "0.73rem" }}>
+                    {codeLines.map((ln, i) => {
+                      const lineNum = i + 1;
+                      const active = curStep?.line === lineNum;
+                      return (
+                        <div
+                          key={lineNum}
+                          style={{
+                            display: "flex",
+                            padding: "1px 8px",
+                            background: active ? "rgba(99,102,241,0.2)" : "transparent",
+                            borderLeft: `3px solid ${active ? "var(--accent)" : "transparent"}`,
+                            color: active ? "var(--text-primary)" : "var(--text-tertiary)",
+                            fontWeight: active ? 600 : 400,
+                          }}
+                        >
+                          <span style={{ width: 22, opacity: 0.5, userSelect: "none", flexShrink: 0 }}>{lineNum}</span>
+                          <span style={{ whiteSpace: "pre", color: active ? "var(--accent)" : "inherit" }}>{ln || " "}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Stepper card */}
+                <div style={{ background: "var(--bg-secondary)", borderRadius: 10, border: "1px solid var(--border-color)", padding: "10px", marginBottom: 10 }}>
+                  {/* Step info */}
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                    <span style={{ fontSize: "0.7rem", fontWeight: 700, color: "var(--accent)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                      Step {stepIdx + 1} / {steps.length}
+                    </span>
+                    {curStep?.action && (
+                      <span style={{ fontSize: "0.68rem", padding: "1px 6px", borderRadius: 4, background: "var(--bg-tertiary)", color: "var(--text-secondary)", border: "1px solid var(--border-subtle)", fontFamily: "var(--font-mono)" }}>
+                        {curStep.action}
+                      </span>
+                    )}
+                  </div>
+
+                  <div style={{ fontSize: "0.82rem", fontWeight: 500, color: "var(--text-primary)", marginBottom: 8, lineHeight: 1.45 }}>
+                    {curStep?.description}
+                  </div>
+
+                  {/* Variables */}
+                  {curStep?.variables && Object.keys(curStep.variables).length > 0 && (
+                    <div style={{ background: "var(--bg-primary)", padding: "6px 8px", borderRadius: 6, border: "1px solid var(--border-subtle)", marginBottom: 10 }}>
+                      <div style={{ fontSize: "0.63rem", fontWeight: 700, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>
+                        Live Variables
+                      </div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 14px", fontFamily: "var(--font-mono)", fontSize: "0.75rem" }}>
+                        {Object.entries(curStep.variables).map(([k, v]) => (
+                          <span key={k}>
+                            <span style={{ color: "var(--accent)" }}>{k}</span>
+                            {" = "}
+                            <strong style={{ color: "var(--text-primary)" }}>{String(v)}</strong>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Controls */}
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <div style={{ display: "flex", gap: 4 }}>
+                      <button id="dr-reset" onClick={() => { setStepIdx(0); setPlaying(false); }} style={ctrlBtn} title="Reset"><RotateCcw size={13} /></button>
+                      <button id="dr-back" onClick={() => setStepIdx((i) => Math.max(0, i - 1))} disabled={stepIdx === 0} style={{ ...ctrlBtn, opacity: stepIdx === 0 ? 0.4 : 1 }} title="Back"><SkipBack size={13} /></button>
+                      <button
+                        id="dr-play"
+                        onClick={() => setPlaying((p) => !p)}
+                        style={{ ...ctrlBtn, background: "var(--accent)", color: "white", borderRadius: "50%", width: 34, height: 34 }}
+                      >
+                        {playing ? <Pause size={14} /> : <Play size={14} />}
+                      </button>
+                      <button id="dr-next" onClick={() => setStepIdx((i) => Math.min(steps.length - 1, i + 1))} disabled={stepIdx === steps.length - 1} style={{ ...ctrlBtn, opacity: stepIdx === steps.length - 1 ? 0.4 : 1 }} title="Next"><SkipForward size={13} /></button>
+                    </div>
+                    <div style={{ display: "flex", gap: 2, background: "var(--bg-primary)", padding: 2, borderRadius: 6, border: "1px solid var(--border-subtle)" }}>
+                      {[0.5, 1, 2].map((s) => (
+                        <button key={s} onClick={() => setPlaySpeed(s)} style={{ padding: "2px 6px", borderRadius: 4, fontSize: "0.68rem", fontWeight: playSpeed === s ? 700 : 500, border: "none", cursor: "pointer", background: playSpeed === s ? "var(--accent)" : "transparent", color: playSpeed === s ? "white" : "var(--text-tertiary)" }}>
+                          {s}x
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Progress bar */}
+                  <div style={{ marginTop: 8, height: 3, background: "var(--border-color)", borderRadius: 2, overflow: "hidden" }}>
+                    <div style={{ height: "100%", width: `${((stepIdx + 1) / steps.length) * 100}%`, background: "var(--accent)", transition: "width 150ms ease" }} />
+                  </div>
+                </div>
               </div>
             )}
           </div>
         )}
 
-        {/* Usage tip */}
-        {!visualized && (
-          <div style={{ marginTop: 8, padding: 12, background: "var(--bg-tertiary)", borderRadius: 10, border: "1px solid var(--border-subtle)" }}>
-            <div style={{ ...sLabel, marginBottom: 6 }}>Example</div>
-            <code style={{ fontSize: "0.75rem", color: "var(--accent)", fontFamily: "var(--font-mono)", whiteSpace: "pre-wrap" }}>
-              {PLACEHOLDERS[selected]}
-            </code>
+        {/* ═══ TAB 2: MANUAL BUILDER ═══════════════════ */}
+        {panelTab === "manual" && (
+          <div>
+            {/* Structure picker */}
+            <div style={sLabel}>Choose Structure</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 5, marginBottom: 14 }}>
+              {DSA_STRUCTS.map((s) => (
+                <button
+                  key={s.id}
+                  id={`dsa-struct-${s.id}`}
+                  onClick={() => { setSelected(s.id); setManualInput(""); setManualError(""); }}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 6,
+                    padding: "7px 9px", borderRadius: 8,
+                    border: selected === s.id ? "1px solid var(--accent-border)" : "1px solid var(--border-color)",
+                    background: selected === s.id ? "var(--accent-muted)" : "var(--bg-secondary)",
+                    color: selected === s.id ? "var(--accent)" : "var(--text-secondary)",
+                    fontWeight: selected === s.id ? 600 : 400,
+                    fontSize: "0.8rem", cursor: "pointer", transition: "all 100ms",
+                  }}
+                >
+                  <span style={{ fontSize: "0.9rem" }}>{s.icon}</span> {s.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Graph options */}
+            {selected === "graph" && (
+              <div style={{ marginBottom: 14, padding: "10px", background: "var(--bg-secondary)", borderRadius: 10, border: "1px solid var(--border-color)" }}>
+                <div style={{ marginBottom: 8 }}>
+                  <div style={{ fontSize: "0.7rem", fontWeight: 600, color: "var(--text-tertiary)", marginBottom: 4, textTransform: "uppercase" }}>Direction</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
+                    {[{ val: false, label: "Undirected (—)" }, { val: true, label: "Directed (→)" }].map(({ val, label }) => (
+                      <button key={String(val)} type="button" onClick={() => setGraphDirected(val)} style={{ ...toggleBtn, border: graphDirected === val ? "1px solid var(--accent-border)" : "1px solid var(--border-color)", background: graphDirected === val ? "var(--accent-muted)" : "var(--bg-primary)", color: graphDirected === val ? "var(--accent)" : "var(--text-secondary)", fontWeight: graphDirected === val ? 600 : 400 }}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: "0.7rem", fontWeight: 600, color: "var(--text-tertiary)", marginBottom: 4, textTransform: "uppercase" }}>Weights</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
+                    {[{ val: false, label: "Unweighted" }, { val: true, label: "Weighted" }].map(({ val, label }) => (
+                      <button key={String(val)} type="button" onClick={() => setGraphWeighted(val)} style={{ ...toggleBtn, border: graphWeighted === val ? "1px solid var(--accent-border)" : "1px solid var(--border-color)", background: graphWeighted === val ? "var(--accent-muted)" : "var(--bg-primary)", color: graphWeighted === val ? "var(--accent)" : "var(--text-secondary)", fontWeight: graphWeighted === val ? 600 : 400 }}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Data input */}
+            <div style={{ ...sLabel, marginBottom: 5 }}>Input Data</div>
+            <textarea
+              id="dsa-manual-input"
+              value={manualInput}
+              onChange={(e) => { setManualInput(e.target.value); setManualError(""); }}
+              placeholder={
+                selected === "array" ? "1 2 3 4 5  or  [1,2,3,4,5]"
+                  : selected === "graph" ? "1 2\n2 3\n3 4\n4 1\n1 3"
+                  : selected === "tree" ? "50 30 70 20 40 60 80"
+                  : selected === "stack" ? "1 2 3 4  (top = last)"
+                  : selected === "queue" ? "1 2 3 4  (front = first)"
+                  : selected === "list" ? "1 2 3 4 5"
+                  : selected === "array2d" ? "[[1,2,3],[4,5,6]]"
+                  : selected === "heap" ? "90 80 70 60 50"
+                  : "Enter data"
+              }
+              rows={selected === "graph" ? 5 : 3}
+              style={{
+                ...codeTextarea,
+                borderColor: manualError ? "var(--danger)" : "var(--border-color)",
+                marginBottom: 6,
+              }}
+            />
+            {manualError && <p style={{ fontSize: "0.75rem", color: "var(--danger)", margin: "0 0 8px" }}>{manualError}</p>}
+
+            <button
+              id="manual-visualize-btn"
+              onClick={handleManualVisualize}
+              disabled={manualLoading}
+              style={{
+                width: "100%", display: "flex", alignItems: "center", justifyContent: "center",
+                gap: 6, padding: "9px", borderRadius: 10,
+                background: "linear-gradient(135deg, #6366f1, #8b5cf6)",
+                color: "white", border: "none", cursor: manualLoading ? "not-allowed" : "pointer",
+                fontSize: "0.875rem", fontWeight: 600, opacity: manualLoading ? 0.7 : 1,
+                transition: "all 150ms",
+              }}
+            >
+              {manualLoading
+                ? <><Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> Rendering…</>
+                : <><Binary size={14} /> Visualize on Canvas</>
+              }
+            </button>
           </div>
         )}
       </div>
@@ -375,13 +769,17 @@ export default function DSAPanel({ onClose, onBroadcastBatch }) {
   );
 }
 
+// ── Style constants ────────────────────────────────────
 const sLabel = { fontSize: "0.68rem", fontWeight: 700, color: "var(--text-tertiary)", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 7 };
 const ghostBtn = { display: "flex", alignItems: "center", justifyContent: "center", width: 26, height: 26, background: "none", border: "none", cursor: "pointer", color: "var(--text-tertiary)", borderRadius: 6 };
-const ctrlBtn  = { display: "flex", alignItems: "center", justifyContent: "center", width: 30, height: 30, background: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: "50%", cursor: "pointer", color: "var(--text-secondary)" };
-const textareaStyle = (hasError) => ({
+const ctrlBtn = { display: "flex", alignItems: "center", justifyContent: "center", width: 28, height: 28, background: "var(--bg-tertiary)", border: "1px solid var(--border-color)", borderRadius: 6, cursor: "pointer", color: "var(--text-secondary)" };
+const badgeBtn = { padding: "3px 8px", borderRadius: 6, fontSize: "0.72rem", border: "1px solid var(--border-color)", cursor: "pointer", transition: "all 120ms" };
+const toggleBtn = { padding: "5px 8px", borderRadius: 6, fontSize: "0.78rem", cursor: "pointer", transition: "all 100ms", border: "1px solid var(--border-color)" };
+const codeTextarea = {
   width: "100%", resize: "vertical", background: "var(--bg-secondary)",
   color: "var(--text-primary)", fontFamily: "var(--font-mono)",
-  border: `1px solid ${hasError ? "var(--danger)" : "var(--border-color)"}`,
-  borderRadius: 8, padding: "9px 10px", fontSize: "0.8rem", outline: "none",
+  border: "1px solid var(--border-color)",
+  borderRadius: 8, padding: "9px 10px", fontSize: "0.78rem", outline: "none",
   transition: "border-color 150ms", lineHeight: 1.5,
-});
+  tabSize: 2,
+};
