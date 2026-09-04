@@ -29,10 +29,13 @@ export async function POST(request) {
 
     const genAI = new GoogleGenerativeAI(apiKey);
 
-    // Only working models — ordered by reliability
+    // Active working models ordered by speed and availability
     const candidateModels = [
-      "gemini-3.5-flash",
       PRIMARY_MODEL,
+      "gemini-3.6-flash",
+      "gemini-3.5-flash",
+      "gemini-3.5-flash-lite",
+      "gemini-flash-lite-latest",
     ].filter((v, i, a) => v && a.indexOf(v) === i);
 
     // ── CRITICAL: Very explicit system prompt to prevent wrong DS detection ──
@@ -53,24 +56,24 @@ Rules for structureType selection:
 
 CRITICAL RULE: Two Sum, Binary Search, Bubble Sort, Merge Sort, Quick Sort, Two Pointers, Sliding Window ALL use arrays. Return structureType: "array" for these. DO NOT return stack/queue for array algorithms.
 
-STEP 2 — Generate representative test data (MAXIMUM 12-15 elements).
+STEP 2 — Generate representative test data (MAXIMUM 6-8 elements, e.g. for stack use "{[()]}" or "()[]{}").
 
-STEP 3 — Simulate execution step by step accurately.
+STEP 3 — Simulate execution step by step accurately (MAXIMUM 6 to 10 key steps). Keep descriptions concise (under 20 words each).
 
 Output MUST be a valid JSON object:
 {
   "algorithmName": "Exact algorithm name",
   "structureType": "array" | "graph" | "tree" | "stack" | "queue" | "list" | "array2d" | "heap",
   "graphOptions": { "directed": false, "weighted": false },
-  "initialInput": "space-separated numbers for array, or edges for graph, or values for tree",
+  "initialInput": "space-separated numbers for array, or edges for graph, or values for tree/stack",
   "complexity": { "time": "O(?)", "space": "O(?)" },
   "summary": "What this code does in 1-2 sentences",
   "steps": [
     {
       "step": 1,
       "line": 5,
-      "description": "Plain-English explanation of exactly what happens at this line",
-      "variables": { "i": 0, "target": 9, "left": 0, "right": 3 },
+      "description": "Short explanation of this step",
+      "variables": { "top": "{" },
       "highlights": [0],
       "highlightColor": "#6366f1",
       "action": "visit"
@@ -90,7 +93,7 @@ Code:
 ${code.trim()}
 \`\`\`
 
-Analyze this code, detect the correct data structure, and simulate execution. Remember: array algorithms like Two Sum, Binary Search, Sorting MUST use structureType "array".`;
+Analyze this code, detect the correct data structure, and simulate execution. Remember: array algorithms like Two Sum, Binary Search, Sorting MUST use structureType "array". Keep simulation to at most 8-10 concise steps.`;
 
     let responseJson = null;
     let lastError = null;
@@ -103,12 +106,12 @@ Analyze this code, detect the correct data structure, and simulate execution. Re
           generationConfig: {
             responseMimeType: "application/json",
             temperature: 0.1, // Very low — we want deterministic accurate output
-            maxOutputTokens: 8192,
+            maxOutputTokens: 2048,
           },
         });
 
-        // Per-model timeout to avoid hanging
-        const timeoutMs = 20000;
+        // Per-model timeout to avoid hanging (allow adequate time for deep code analysis)
+        const timeoutMs = 45000;
         const fetchPromise = model.generateContent(userPrompt);
         const timeoutPromise = new Promise((_, reject) =>
           setTimeout(() => reject(new Error(`Model ${modelId} timed out after ${timeoutMs}ms`)), timeoutMs)
@@ -127,16 +130,19 @@ Analyze this code, detect the correct data structure, and simulate execution. Re
           break;
         }
       } catch (err) {
-        console.warn(`[code-dryrun] Model ${modelId} failed:`, err.message);
+        console.error(`[code-dryrun] Model ${modelId} failed:`, err.message);
         lastError = err;
         continue;
       }
     }
 
-    // If all AI models failed, return informative error (no silent fallback that shows wrong DS)
+    // If all AI models failed, return informative error with details
     if (!responseJson) {
+      console.error("[code-dryrun] All candidate models failed. Last error:", lastError?.message);
       return NextResponse.json({
-        error: "AI service is temporarily unavailable. Please try again in a few seconds.",
+        error: lastError?.message
+          ? `AI error (${lastError.message.slice(0, 120)}). Please try again.`
+          : "AI service is temporarily unavailable. Please try again in a few seconds.",
         retryable: true,
       }, { status: 503 });
     }

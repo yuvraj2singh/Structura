@@ -39,11 +39,11 @@ export async function POST(request) {
     const genAI = new GoogleGenerativeAI(apiKey);
     const candidateModels = [
       MODEL_NAME,
+      "gemini-3.5-flash-lite",
+      "gemini-flash-lite-latest",
       "gemini-3.6-flash",
-      "gemini-2.5-flash",
-      "gemini-1.5-flash",
-      "gemini-2.0-flash",
-    ].filter((v, i, a) => a.indexOf(v) === i); // unique
+      "gemini-3.5-flash",
+    ].filter((v, i, a) => v && a.indexOf(v) === i); // unique
 
     let rawText = "";
     let usedModel = MODEL_NAME;
