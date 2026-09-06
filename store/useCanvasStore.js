@@ -183,22 +183,42 @@ const useCanvasStore = create((set, get) => ({
 
   // Highlight elements (used for DSA dry runs)
   highlightElements: (ids, color = "#f59e0b") => {
+    const { elements } = get();
+    const idsSet = new Set(ids);
+    const noChange = elements.every((el) => {
+      const shouldBeHl = idsSet.has(el.id);
+      if (shouldBeHl) {
+        return el._highlighted === true && el.style?._highlight === color;
+      }
+      return !el._highlighted && !el.style?._highlight;
+    });
+    if (noChange) return;
+
     set((s) => ({
-      elements: s.elements.map((el) =>
-        ids.includes(el.id)
-          ? { ...el, style: { ...el.style, _highlight: color }, _highlighted: true }
-          : { ...el, style: { ...el.style, _highlight: null }, _highlighted: false }
-      ),
+      elements: s.elements.map((el) => {
+        const shouldBeHl = idsSet.has(el.id);
+        if (shouldBeHl) {
+          if (el._highlighted && el.style?._highlight === color) return el;
+          return { ...el, style: { ...el.style, _highlight: color }, _highlighted: true };
+        } else {
+          if (!el._highlighted && !el.style?._highlight) return el;
+          return { ...el, style: { ...el.style, _highlight: null }, _highlighted: false };
+        }
+      }),
     }));
   },
 
   clearHighlights: () => {
+    const { elements } = get();
+    const hasAny = elements.some((el) => el._highlighted || el.style?._highlight);
+    if (!hasAny) return;
+
     set((s) => ({
-      elements: s.elements.map((el) => ({
-        ...el,
-        style: { ...el.style, _highlight: null },
-        _highlighted: false,
-      })),
+      elements: s.elements.map((el) =>
+        el._highlighted || el.style?._highlight
+          ? { ...el, style: { ...el.style, _highlight: null }, _highlighted: false }
+          : el
+      ),
     }));
   },
 }));

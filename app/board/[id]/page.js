@@ -204,6 +204,10 @@ export default function BoardPage() {
     toast.success("Canvas cleared");
   }, []);
 
+  const handleDSABroadcastBatch = useCallback((els) => {
+    broadcastBatch(socketRef.current, els);
+  }, []);
+
   // ── Rename Board & Persist to DB ───────────────
   const handleTitleChange = useCallback(async (newTitle) => {
     if (!newTitle || !newTitle.trim()) return;
@@ -506,7 +510,7 @@ export default function BoardPage() {
         {showDSA && (
           <DSAPanel
             onClose={() => setShowDSA(false)}
-            onBroadcastBatch={(els) => broadcastBatch(socketRef.current, els)}
+            onBroadcastBatch={handleDSABroadcastBatch}
           />
         )}
         {showHistory && (

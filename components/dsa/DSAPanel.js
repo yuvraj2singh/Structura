@@ -8,6 +8,8 @@ import {
 import useCanvasStore from "@/store/useCanvasStore";
 import { parseInput } from "@/lib/dsa/parsers";
 import { layoutDSA } from "@/lib/dsa/layout";
+import { createElement } from "@/lib/canvas/elements";
+import { ELEMENT_TYPES } from "@/lib/constants";
 import toast from "react-hot-toast";
 
 // ── Constants ─────────────────────────────────────────
@@ -198,8 +200,16 @@ export default function DSAPanel({ onClose, onBroadcastBatch }) {
   const [playing, setPlaying] = useState(false);
   const [playSpeed, setPlaySpeed] = useState(1);
   const playerRef = useRef(null);
+  const initialElementsRef = useRef(new Map());
 
-  const { addElements, highlightElements, clearHighlights } = useCanvasStore();
+  const broadcastRef = useRef(onBroadcastBatch);
+  useEffect(() => {
+    broadcastRef.current = onBroadcastBatch;
+  }, [onBroadcastBatch]);
+
+  const addElements = useCanvasStore((s) => s.addElements);
+  const highlightElements = useCanvasStore((s) => s.highlightElements);
+  const clearHighlights = useCanvasStore((s) => s.clearHighlights);
 
   // ── Resize Logic ─────────────────────────────────────
   useEffect(() => {
@@ -234,13 +244,26 @@ export default function DSAPanel({ onClose, onBroadcastBatch }) {
       }));
       originY = maxY + 60;
     }
-    const raw = layoutDSA(structType, parsed.data, { x: 80, y: originY });
-    const gid = `dsa-${structType}-${Date.now()}`;
+    const raw = layoutDSA(structType, parsed.data, { x: 80, y: options.label ? originY + 28 : originY });
+    const gid = `dsa-${structType}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
     const els = raw.map((el) => ({ ...el, groupId: gid }));
+    if (options.label) {
+      els.unshift(
+        createElement(ELEMENT_TYPES.TEXT, {
+          x: 80,
+          y: originY,
+          width: 320,
+          height: 22,
+          data: { text: options.label },
+          style: { fontSize: 13, fontWeight: "700", color: "#818cf8" },
+          groupId: gid,
+        })
+      );
+    }
     addElements(els);
-    onBroadcastBatch?.(useCanvasStore.getState().elements);
+    broadcastRef.current?.(useCanvasStore.getState().elements);
     return els;
-  }, [addElements, onBroadcastBatch]);
+  }, [addElements]);
 
   // ── Manual Visualize ───────────────────────────────
   const handleManualVisualize = () => {
@@ -252,6 +275,7 @@ export default function DSAPanel({ onClose, onBroadcastBatch }) {
         directed: graphDirected,
         weighted: graphWeighted,
       });
+      initialElementsRef.current = new Map(els.map((e) => [e.id, { ...(e.data || {}) }]));
       setCreatedEls(els);
       setSteps([]);
       setStepIdx(0);
@@ -290,17 +314,32 @@ export default function DSAPanel({ onClose, onBroadcastBatch }) {
         throw new Error("AI returned incomplete result — please try again");
       }
 
-      // Draw detected structure on canvas
-      const els = renderOnCanvas(
-        data.structureType,
-        data.initialInput,
-        data.graphOptions || {}
-      );
-      setCreatedEls(els);
+      // Draw detected structures on canvas (support multiple structures)
+      const structuresToRender = Array.isArray(data.structures) && data.structures.length > 0
+        ? data.structures
+        : [{ name: data.structureType, type: data.structureType, initialInput: data.initialInput }];
+
+      let allEls = [];
+      for (const struct of structuresToRender) {
+        if (!struct.type || !struct.initialInput) continue;
+        const els = renderOnCanvas(
+          struct.type,
+          struct.initialInput,
+          {
+            ...(data.graphOptions || {}),
+            label: struct.name || STRUCT_TYPE_LABELS[struct.type] || struct.type,
+          }
+        );
+        allEls = allEls.concat(els);
+      }
+
+      initialElementsRef.current = new Map(allEls.map((e) => [e.id, { ...(e.data || {}) }]));
+      setCreatedEls(allEls);
       setAnalysisResult(data);
       setSteps(data.steps);
       setStepIdx(0);
-      toast.success(`Detected: ${STRUCT_TYPE_LABELS[data.structureType] || data.structureType}`);
+      const dsCount = data.dataStructuresUsed?.length || 1;
+      toast.success(`Detected: ${data.dataStructuresUsed?.join(" + ") || STRUCT_TYPE_LABELS[data.structureType] || data.structureType}`);
     } catch (e) {
       setCodeError(e.message || "Analysis failed");
       toast.error(e.message || "Analysis failed");
@@ -317,18 +356,54 @@ export default function DSAPanel({ onClose, onBroadcastBatch }) {
 
     const ids = [];
     highlights.forEach((hl) => {
-      // Try index match first
+      // 1. If hl is an object with r/row and c/col (e.g. { r: 1, c: 2 })
+      if (hl && typeof hl === "object" && !Array.isArray(hl)) {
+        const r = hl.r ?? hl.row;
+        const c = hl.c ?? hl.col;
+        if (r !== undefined && c !== undefined) {
+          const match = els.find((e) => e.data?.row === Number(r) && e.data?.col === Number(c));
+          if (match) { ids.push(match.id); return; }
+        }
+      }
+
+      // 2. If hl is a coordinate array [r, c]
+      if (Array.isArray(hl) && hl.length === 2) {
+        const [r, c] = hl;
+        const match = els.find((e) => e.data?.row === Number(r) && e.data?.col === Number(c));
+        if (match) { ids.push(match.id); return; }
+      }
+
+      // 3. If hl is a string coordinate like "[1][2]" or "[1, 2]" or "1,2"
+      if (typeof hl === "string") {
+        const coordMatch = hl.match(/\[?(\d+)[,\s\]\[]+(\d+)\]?/);
+        if (coordMatch) {
+          const r = Number(coordMatch[1]);
+          const c = Number(coordMatch[2]);
+          const match = els.find((e) => e.data?.row === r && e.data?.col === c);
+          if (match) { ids.push(match.id); return; }
+        }
+      }
+
+      // 4. Try 2D index match or flatIndex / 1D index
       const asNum = Number(hl);
       if (!isNaN(asNum)) {
+        const byFlat = els.find((e) => e.data?.flatIndex === asNum);
+        if (byFlat) { ids.push(byFlat.id); return; }
         const byIdx = els.find((e) => e.data?.index === asNum);
         if (byIdx) { ids.push(byIdx.id); return; }
       }
-      // Try value / label match
+
+      // 5. Try exact index string match (e.g., e.data?.index === hl)
+      const byIdxStr = els.find((e) => String(e.data?.index) === String(hl));
+      if (byIdxStr) { ids.push(byIdxStr.id); return; }
+
+      // 6. Try value / label match
       const byVal = els.find(
         (e) => String(e.data?.value) === String(hl) || String(e.data?.id) === String(hl)
       );
       if (byVal) { ids.push(byVal.id); return; }
-      // Positional fallback for arrays
+
+      // 7. Positional fallback for elements
       if (!isNaN(asNum) && els[asNum]) {
         ids.push(els[asNum].id);
       }
@@ -338,10 +413,115 @@ export default function DSAPanel({ onClose, onBroadcastBatch }) {
     else clearHighlights();
   }, [highlightElements, clearHighlights]);
 
+  // ── Sync Element Values based on Step Mutations ────
+  const syncStepState = useCallback((targetIdx) => {
+    if (!steps.length || !createdEls.length) return;
+
+    // 1. Baseline values from initial snapshot
+    const currentValues = new Map();
+    createdEls.forEach((el) => {
+      const init = initialElementsRef.current.get(el.id);
+      if (init && init.value !== undefined) {
+        currentValues.set(el.id, init.value);
+      } else if (el.data?.value !== undefined) {
+        currentValues.set(el.id, el.data.value);
+      }
+    });
+
+    const findCell = (target, mut) => {
+      if (!target && !mut) return null;
+      const r = mut?.r ?? (typeof target === "object" && !Array.isArray(target) ? (target?.r ?? target?.row) : undefined);
+      const c = mut?.c ?? (typeof target === "object" && !Array.isArray(target) ? (target?.c ?? target?.col) : undefined);
+      if (r !== undefined && c !== undefined) {
+        const found = createdEls.find((e) => e.data?.row === Number(r) && e.data?.col === Number(c));
+        if (found) return found;
+      }
+      if (Array.isArray(target) && target.length === 2) {
+        const found = createdEls.find((e) => e.data?.row === Number(target[0]) && e.data?.col === Number(target[1]));
+        if (found) return found;
+      }
+      if (typeof target === "string") {
+        const coordMatch = target.match(/\[?(\d+)[,\s\]\[]+(\d+)\]?/);
+        if (coordMatch) {
+          const row = Number(coordMatch[1]);
+          const col = Number(coordMatch[2]);
+          const found = createdEls.find((e) => e.data?.row === row && e.data?.col === col);
+          if (found) return found;
+        }
+        const byIdxStr = createdEls.find((e) => String(e.data?.index) === String(target));
+        if (byIdxStr) return byIdxStr;
+      }
+      const asNum = Number(target);
+      if (!isNaN(asNum)) {
+        const byFlat = createdEls.find((e) => e.data?.flatIndex === asNum);
+        if (byFlat) return byFlat;
+        const byIdx = createdEls.find((e) => e.data?.index === asNum);
+        if (byIdx) return byIdx;
+      }
+      return null;
+    };
+
+    // 2. Replay all steps up to targetIdx
+    for (let i = 0; i <= targetIdx && i < steps.length; i++) {
+      const s = steps[i];
+      if (!s) continue;
+
+      if (s.dataSnapshot && typeof s.dataSnapshot === "string") {
+        const tokens = s.dataSnapshot.trim().replace(/[\[\],]/g, " ").split(/\s+/).filter(Boolean);
+        const matrixCells = createdEls.filter((e) => e.data?.flatIndex !== undefined);
+        if (tokens.length === matrixCells.length) {
+          matrixCells.forEach((cell) => {
+            const idx = cell.data.flatIndex;
+            if (tokens[idx] !== undefined) {
+              currentValues.set(cell.id, tokens[idx]);
+            }
+          });
+        }
+      }
+
+      const mutations = Array.isArray(s.mutations) ? s.mutations : [];
+      mutations.forEach((m) => {
+        if (!m || m.value === undefined) return;
+        const target = m.target ?? m.index ?? m.coordinate ?? (s.highlights && s.highlights[0]);
+        const cell = findCell(target, m);
+        if (cell) {
+          currentValues.set(cell.id, m.value);
+        }
+      });
+    }
+
+    // 3. Apply updates if any element value changed
+    const currentElements = useCanvasStore.getState().elements;
+    const updates = [];
+    currentValues.forEach((newVal, id) => {
+      const existing = currentElements.find((e) => e.id === id);
+      if (existing && String(existing.data?.value) !== String(newVal)) {
+        updates.push({
+          id,
+          data: { ...existing.data, value: newVal },
+        });
+      }
+    });
+
+    if (updates.length > 0) {
+      useCanvasStore.getState().updateElements(updates);
+      broadcastRef.current?.(useCanvasStore.getState().elements);
+    }
+  }, [steps, createdEls]);
+
   useEffect(() => {
-    if (steps.length) syncHighlight(steps[stepIdx], createdEls);
-    return () => clearHighlights();
-  }, [stepIdx, steps, createdEls, syncHighlight, clearHighlights]);
+    if (steps.length && createdEls.length) {
+      syncStepState(stepIdx);
+      syncHighlight(steps[stepIdx], createdEls);
+    }
+  }, [stepIdx, steps, createdEls, syncStepState, syncHighlight]);
+
+  // Clear highlights only on component unmount
+  useEffect(() => {
+    return () => {
+      clearHighlights();
+    };
+  }, [clearHighlights]);
 
   // ── Auto-play ──────────────────────────────────────
   useEffect(() => {
@@ -546,23 +726,45 @@ export default function DSAPanel({ onClose, onBroadcastBatch }) {
             {analysisResult && steps.length > 0 && (
               <div>
                 {/* Summary row */}
-                <div style={{ marginBottom: 10, padding: "8px 10px", background: "var(--bg-secondary)", borderRadius: 9, border: "1px solid var(--border-color)" }}>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 4 }}>
-                    <span style={{ fontWeight: 700, fontSize: "0.88rem", color: "var(--text-primary)" }}>
+                <div style={{ marginBottom: 10, padding: "10px", background: "var(--bg-secondary)", borderRadius: 9, border: "1px solid var(--border-color)" }}>
+                  <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, marginBottom: 6 }}>
+                    <span style={{ fontWeight: 700, fontSize: "0.88rem", color: "var(--text-primary)", lineHeight: 1.3 }}>
                       {analysisResult.algorithmName}
                     </span>
-                    <div style={{ display: "flex", gap: 4 }}>
-                      <span style={{ fontSize: "0.68rem", padding: "2px 7px", borderRadius: 20, background: "var(--accent-muted)", color: "var(--accent)", fontWeight: 600 }}>
-                        {STRUCT_TYPE_LABELS[analysisResult.structureType] || analysisResult.structureType}
+                    {analysisResult.complexity?.time && (
+                      <span style={{ fontSize: "0.68rem", padding: "2px 7px", borderRadius: 20, background: "var(--bg-tertiary)", color: "var(--text-secondary)", fontWeight: 600, border: "1px solid var(--border-color)", flexShrink: 0 }}>
+                        {analysisResult.complexity.time}
                       </span>
-                      {analysisResult.complexity?.time && (
-                        <span style={{ fontSize: "0.68rem", padding: "2px 7px", borderRadius: 20, background: "var(--bg-tertiary)", color: "var(--text-secondary)", fontWeight: 600, border: "1px solid var(--border-color)" }}>
-                          {analysisResult.complexity.time}
-                        </span>
-                      )}
-                    </div>
+                    )}
                   </div>
-                  <div style={{ fontSize: "0.75rem", color: "var(--text-tertiary)", lineHeight: 1.4 }}>
+
+                  {/* Detected Data Structures Badges */}
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 8 }}>
+                    {(analysisResult.dataStructuresUsed && analysisResult.dataStructuresUsed.length > 0
+                      ? analysisResult.dataStructuresUsed
+                      : [STRUCT_TYPE_LABELS[analysisResult.structureType] || analysisResult.structureType]
+                    ).map((ds, idx) => (
+                      <span
+                        key={idx}
+                        style={{
+                          fontSize: "0.7rem",
+                          padding: "2px 8px",
+                          borderRadius: 6,
+                          background: idx === 0 ? "var(--accent-muted)" : "rgba(99, 102, 241, 0.08)",
+                          color: "var(--accent)",
+                          fontWeight: 600,
+                          border: "1px solid rgba(99, 102, 241, 0.2)",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 4,
+                        }}
+                      >
+                        <span style={{ opacity: 0.6, fontSize: "0.65rem" }}>◆</span> {ds}
+                      </span>
+                    ))}
+                  </div>
+
+                  <div style={{ fontSize: "0.75rem", color: "var(--text-tertiary)", lineHeight: 1.45 }}>
                     {analysisResult.summary}
                   </div>
                 </div>
