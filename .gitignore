@@ -54,3 +54,7 @@ Thumbs.db
 # Logs
 *.log
 npm-debug.log*
+
+
+#OverView
+PROJECT_OVERVIEW.md
