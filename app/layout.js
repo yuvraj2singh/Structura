@@ -5,6 +5,7 @@ import ThemeProvider from "@/components/layout/ThemeProvider";
 import { APP_NAME, APP_DESCRIPTION } from "@/lib/constants";
 
 export const metadata = {
+  metadataBase: new URL("https://structura-7zu5.onrender.com"),
   title: {
     default: APP_NAME,
     template: `%s | ${APP_NAME}`,
@@ -15,6 +16,8 @@ export const metadata = {
   openGraph: {
     title: APP_NAME,
     description: APP_DESCRIPTION,
+    url: "https://structura-7zu5.onrender.com",
+    siteName: APP_NAME,
     type: "website",
   },
 };

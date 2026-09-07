@@ -2,6 +2,8 @@
 
 > **AI-powered collaborative whiteboard + DSA visualizer** built with Next.js, Socket.IO, MongoDB, and Gemini AI.
 
+🌐 **Live Demo:** [https://structura-7zu5.onrender.com](https://structura-7zu5.onrender.com)
+
 ---
 
 ## ✨ Features
