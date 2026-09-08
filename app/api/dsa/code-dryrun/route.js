@@ -208,79 +208,74 @@ You MUST include "mutations" in that step so the canvas visually updates the cel
 Format: "mutations": [ { "target": "[r][c]" or flat index, "value": "#" } ]
 Optionally also provide "dataSnapshot": string with full updated matrix rows or array elements.
 
-STEP 5 — SPECIAL MANDATORY GRAPH EXECUTION PROTOCOL (BFS, DFS, DIJKSTRA, ETC.):
-When the algorithm traverses or processes a Graph:
-1. structureType MUST be "graph".
-2. initialInput MUST represent the graph edges, e.g. "1 2\n1 3\n2 1\n2 3\n3 1\n3 2\n3 4\n4 3" or "1-2, 1-3, 2-3, 3-4" or "[[1,2],[1,3],[2,3],[3,4]]".
-3. Provide secondary structure in "structures":
-   - If BFS: { "name": "Queue (FIFO)", "type": "queue", "initialInput": "1" }
-   - If DFS: { "name": "Call Stack", "type": "stack", "initialInput": "dfs(1)" }
-4. VARIABLES TRACKING (MANDATORY & 100% ACCURATE FOR EVERY SINGLE STEP):
+5. SPECIAL MANDATORY GRAPH & PRIORITY QUEUE PROTOCOL (BFS, DFS, DIJKSTRA, HEAP, ETC.):
+When the algorithm uses a Graph or Priority Queue / Heap (e.g. Dijkstra, swimInWater, Prim's, Kth largest, Min-Heap):
+1. For graph traversals, structureType MUST be "graph" (or "array2d" if on a 2D grid like swimInWater).
+2. If priority queue / min-heap is used:
+   - Include "Priority Queue (Min Heap)" in dataStructuresUsed.
+   - Provide "pq" in "variables" on EVERY SINGLE STEP!
+   - "pq" MUST be an array representing the current active elements in the heap in min-to-max order (e.g. [[0, 0, 0]] or [{dist: 0, node: 0}] or [0, 2, 5]).
+   - When pq.pop() occurs: remove the min element from "pq" immediately!
+   - When pq.push(...) occurs: insert the new element into "pq" immediately!
+   - On intermediate steps (checking conditions, loops, etc.): keep the current "pq" elements intact. NEVER set it to undefined or empty if items are still in the queue!
+3. VARIABLES TRACKING (MANDATORY & 100% ACCURATE FOR EVERY SINGLE STEP):
    Every single step MUST accurately report:
-   - "visited": An array of all nodes visited so far (e.g. [1], then [1, 2], then [1, 2, 3]). Once a node is marked visited, it must NEVER disappear from "visited" in subsequent steps!
-   - "queue": For BFS, an array showing the EXACT current queue contents in order (e.g. [1] -> after pop: [] -> after enqueuing neighbors: [2, 3] -> after popping 2: [3] -> after enqueuing 4: [3, 4]). Pop removes the head element; append adds to the tail. It must reflect the actual queue at that exact line of code!
-   - "stack": For DFS, an array showing the active recursion/call stack (e.g. ["dfs(1)", "dfs(2)"]).
-   - "current" or "node": The node currently popped or being expanded (e.g. 1).
-   - "neighbor" or "nb": The neighbor currently being evaluated in the adjacency loop.
-   - "order": An array of nodes in traversal order (e.g. [1, 2, 3, 4]).
-5. GRANULARITY FOR GRAPH BFS/DFS:
-   - Step: Enqueue start node and add to visited -> variables: { visited: [1], queue: [1], order: [] }
-   - Step: Check while queue condition
-   - Step: Pop front node -> variables: { node: 1, visited: [1], queue: [], order: [] }
-   - Step: Add node to order -> variables: { node: 1, visited: [1], queue: [], order: [1] }
-   - Step: Inspect neighbor 2 -> variables: { node: 1, nb: 2, visited: [1], queue: [], order: [1] }
-   - Step: Check "if 2 not in visited" -> True -> mark visited and enqueue -> variables: { node: 1, nb: 2, visited: [1, 2], queue: [2], order: [1] }
-   - Step: Inspect neighbor 3 -> variables: { node: 1, nb: 3, visited: [1, 2], queue: [2], order: [1] }
-   - Step: Check "if 3 not in visited" -> True -> mark visited and enqueue -> variables: { node: 1, nb: 3, visited: [1, 2, 3], queue: [2, 3], order: [1] }
-   - Step: Next queue iteration: pop front node 2 -> variables: { node: 2, visited: [1, 2, 3], queue: [3], order: [1] }
-   - Step: For neighbor 1 of node 2 -> "1 already in visited, skip!" -> variables: { node: 2, nb: 1, visited: [1, 2, 3], queue: [3], order: [1, 2] }
-   - Continue until the queue is empty!
-6. HIGHLIGHTS FOR GRAPHS:
-   - Highlight the current node being processed (e.g. ["1"]).
-   - When inspecting an edge or neighbor: highlight both node and neighbor, or edge (e.g. ["1", "2"] or ["1-2"]).
-   - Use highlightColor: "#6366f1" for current node, "#f59e0b" for checking neighbor, "#10b981" for enqueued/visited, "#ef4444" for already visited (skipped).
+   - "pq": The current priority queue contents (e.g. [[0, 0, 0], [2, 0, 1]]).
+   - "dist": Current distance table/array/matrix (e.g. [0, INF, INF] or updated values).
+   - "visited": An array of all nodes visited/settled so far. Once visited, never drop from subsequent steps!
+   - "queue": For standard BFS, exact array of queued nodes in FIFO order. Pop removes head, push appends to tail.
+   - "stack": For DFS, array showing active call stack.
+   - "current" or "node": The node currently popped or being expanded.
+   - "neighbor" or "nb": The neighbor currently being evaluated.
+   - "order": Array of nodes in settled/traversal order.
+4. GRANULARITY FOR PRIORITY QUEUE / DIJKSTRA:
+   - Step: Initialize dist and push start node -> variables: { pq: [[0, 0]], dist: [0, INF, INF] }
+   - Step: While !pq.empty() condition check
+   - Step: Pop top min element (d, u) -> variables: { d: 0, u: 0, pq: [], dist: [0, INF, INF] }
+   - Step: For neighbor v with weight w: relax edge -> update dist[v] and pq.push({dist[v], v}) -> variables: { u: 0, v: 1, pq: [[2, 1]], dist: [0, 2, INF] }
+   - Step: Next loop: pop top element from pq -> variables: { u: 1, pq: [], dist: [0, 2, INF] }
+   - Maintain continuous, non-vanishing "pq" and "dist" across all steps until completion!
+5. HIGHLIGHTS:
+   - Highlight the current node or cell being processed.
+   - Use highlightColor: "#6366f1" for current, "#f59e0b" for checking/relaxing edge, "#10b981" for enqueued/pushed, "#ef4444" for skipped/outdated.
 
 Output MUST be a valid JSON object:
 {
-  "algorithmName": "Exact algorithm name (e.g. Breadth-First Search (Graph))",
-  "structureType": "array" | "graph" | "tree" | "stack" | "queue" | "list" | "array2d" | "heap",
-  "dataStructuresUsed": ["Graph (Adjacency List)", "Queue (FIFO)"],
+  "algorithmName": "Exact algorithm name (e.g. Dijkstra's Algorithm)",
+  "structureType": "graph" | "array2d" | "array" | "heap" | "stack" | "queue" | "tree" | "list",
+  "dataStructuresUsed": ["Graph (Adjacency List)", "Priority Queue (Min Heap)"],
   "structures": [
     {
       "name": "Graph (Adjacency)",
       "type": "graph",
-      "initialInput": "1 2\n1 3\n2 3\n3 4"
+      "initialInput": "0-1(2)\n0-2(4)\n1-2(1)"
     },
     {
-      "name": "Queue (FIFO)",
-      "type": "queue",
-      "initialInput": "1"
+      "name": "Priority Queue (Min Heap)",
+      "type": "heap",
+      "initialInput": "0"
     }
   ],
-  "graphOptions": { "directed": false, "weighted": false },
-  "initialInput": "space-separated numbers for array, or matrix rows for array2d, or edges for graph, or values for tree/stack",
-  "complexity": { "time": "O(V + E)", "space": "O(V)" },
+  "graphOptions": { "directed": false, "weighted": true },
+  "initialInput": "space-separated numbers for array, or matrix rows for array2d, or edges for graph",
+  "complexity": { "time": "O((V + E) log V)", "space": "O(V + E)" },
   "summary": "What this code does and which data structures it utilizes in 1-2 sentences",
   "steps": [
     {
       "step": 1,
-      "line": 13,
-      "description": "Mark boundary cell (0, 1) as safe '#'",
-      "variables": { "r": 0, "c": 1 },
-      "highlights": ["[0][1]"],
-      "highlightColor": "#f59e0b",
-      "action": "mark_safe",
-      "mutations": [
-        { "target": "[0][1]", "value": "#" }
-      ],
-      "dataSnapshot": "X # X X\nO X O X\nX O X X"
+      "line": 12,
+      "description": "Initialize source distance to 0 and push (0, source) into priority queue",
+      "variables": { "u": 0, "dist": [0, "INF", "INF"], "pq": [[0, 0]] },
+      "highlights": ["0"],
+      "highlightColor": "#10b981",
+      "action": "push"
     }
   ]
 }
 
-Note for "structures": Provide 1 to 2 visual structures used by the algorithm (e.g. primary matrix + call stack for recursive DFS; or graph + queue for BFS). Each structure type must be one of: "array" | "graph" | "tree" | "stack" | "queue" | "list" | "array2d" | "heap".
-highlightColor values: "#6366f1" (active/current), "#f59e0b" (comparing/modifying), "#10b981" (found/success/safe/enqueued), "#ef4444" (mismatch/removed/captured/already_visited)
-highlights: node labels (e.g. ["1", "2"] or ["1-2"]) for graph, zero-based flat index or coordinate for array2d, indices for 1D array, node labels for tree.
+Note for "structures": Provide 1 to 2 visual structures used by the algorithm.
+highlightColor values: "#6366f1" (active/current), "#f59e0b" (comparing/modifying), "#10b981" (found/success/safe/enqueued/pushed), "#ef4444" (mismatch/removed/captured/already_visited)
+highlights: node labels (e.g. ["1", "2"] or ["1-2"]) for graph, coordinates "[r][c]" for array2d, indices for 1D array.
 
 Return ONLY the raw JSON. No markdown, no backticks, no extra text.`;
 
@@ -294,10 +289,13 @@ ${code.trim()}
 Analyze this code and detect ALL data structures used (primary and secondary).
 CRITICAL REQUIREMENTS:
 1. Complete Dry-Run: Simulate the algorithm execution with 20 to 35 granular, complete steps (maximum 40 steps) until the algorithm finishes.
-2. GRAPH ACCURACY (BFS/DFS/Dijkstra):
-   - For graph traversals, you MUST accurately maintain and update "visited" (array of visited nodes) and "queue" (exact array of queued nodes in FIFO order) in "variables" on EVERY single step!
-   - When a node is popped from the queue, immediately remove it from "queue". When a neighbor is added to the queue, immediately append it to "queue". When marked visited, immediately add it to "visited" and keep it in all subsequent steps.
-3. Real-Time Canvas Mutations: For every step where values in the data structure change (e.g. board[r][c] = '#', swapping array elements, changing 'O' -> 'X'), you MUST specify the 'mutations' array with target and value so the elements update in real time on the canvas.`;
+2. PRIORITY QUEUE / GRAPH ACCURACY:
+   - If a priority_queue / min-heap / queue is used, you MUST maintain and update "pq" (or "queue") in "variables" on EVERY SINGLE STEP!
+   - When pq.push() occurs: add the element to "pq".
+   - When pq.pop() occurs: remove the min element from "pq".
+   - On checking/comparison steps: KEEP THE CURRENT "pq" AND "dist" IN "variables" (do NOT leave them undefined or empty!).
+   - Also maintain "dist" (array or object of current distances) across all steps.
+3. Real-Time Canvas Mutations: For 2D matrix or array changes, include the 'mutations' array with target and value.`;
     let responseJson = null;
     let lastError = null;
 
@@ -409,11 +407,13 @@ CRITICAL REQUIREMENTS:
     }
     responseJson.steps = rawSteps;
 
-    // 5. Sanitize each step — ensure graph state tracking, highlights, mutations, and snapshots are preserved
+    // 5. Sanitize each step — ensure graph & priority queue state tracking, highlights, mutations, and snapshots are preserved
     let lastVisited = [];
     let lastQueue = [];
     let lastStack = [];
     let lastOrder = [];
+    let lastPQ = [];
+    let lastDist = null;
 
     const isGraph = responseJson.structureType === "graph" ||
       responseJson.dataStructuresUsed?.some((ds) => /graph/i.test(ds));
@@ -430,6 +430,21 @@ CRITICAL REQUIREMENTS:
       }
       if (typeof val === "number" || typeof val === "boolean") return [val];
       return [];
+    };
+
+    const parsePQVal = (val) => {
+      if (Array.isArray(val)) return val;
+      if (typeof val === "string") {
+        try {
+          const parsed = JSON.parse(val);
+          if (Array.isArray(parsed)) return parsed;
+        } catch {
+          // e.g. "[(0, 0), (2, 1)]" or "[0, 2]"
+          const matches = val.match(/\([^\)]+\)|\[[^\]]+\]|[^,\s\[\]]+/g);
+          if (matches) return matches.map((m) => m.trim());
+        }
+      }
+      return val ? [val] : [];
     };
 
     responseJson.steps = responseJson.steps.map((s, i) => {
@@ -461,8 +476,35 @@ CRITICAL REQUIREMENTS:
         }
       }
 
-      // Graph variable hygiene
+      // Variable hygiene & state tracking
       const vars = s.variables && typeof s.variables === "object" ? { ...s.variables } : {};
+
+      // ── Priority Queue / Min-Heap Tracking ──
+      const rawPQ = vars.pq ?? vars.priority_queue ?? vars.minHeap ?? vars.min_heap ?? vars.heap;
+      if (rawPQ !== undefined) {
+        vars.pq = parsePQVal(rawPQ);
+        lastPQ = vars.pq;
+      } else if (lastPQ.length > 0) {
+        vars.pq = [...lastPQ];
+      }
+
+      // Handle pop descriptions if LLM forgot to update pq
+      if (s.description && /(?:pq|heap|priority_queue)\.pop|pop.*(?:top|min|element)/i.test(s.description)) {
+        if (rawPQ === undefined && lastPQ.length > 0) {
+          vars.pq = lastPQ.slice(1);
+          lastPQ = vars.pq;
+        }
+      }
+
+      // ── Distance Array / Table Tracking ──
+      const rawDist = vars.dist ?? vars.distance ?? vars.distances;
+      if (rawDist !== undefined) {
+        vars.dist = rawDist;
+        lastDist = Array.isArray(rawDist) ? [...rawDist] : (typeof rawDist === "object" && rawDist !== null ? { ...rawDist } : rawDist);
+      } else if (lastDist !== null) {
+        vars.dist = Array.isArray(lastDist) ? [...lastDist] : (typeof lastDist === "object" ? { ...lastDist } : lastDist);
+      }
+
       if (isGraph) {
         // Track visited
         if (vars.visited !== undefined) {

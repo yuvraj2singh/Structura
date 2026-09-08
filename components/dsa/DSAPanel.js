@@ -980,11 +980,20 @@ export default function DSAPanel({ onClose, onBroadcastBatch }) {
                             {(() => {
                               const pqVal = curStep.variables.pq ?? curStep.variables.priority_queue;
                               const items = Array.isArray(pqVal) ? pqVal : (typeof pqVal === "string" ? [pqVal] : []);
+                              const formatPQItem = (item) => {
+                                if (Array.isArray(item)) return `(${item.join(", ")})`;
+                                if (typeof item === "object" && item !== null) {
+                                  if (item.dist !== undefined && item.node !== undefined) return `(d:${item.dist}, u:${item.node})`;
+                                  if (item.d !== undefined && item.u !== undefined) return `(d:${item.d}, u:${item.u})`;
+                                  return JSON.stringify(item);
+                                }
+                                return String(item);
+                              };
                               return items.length > 0 ? (
                                 <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
                                   {items.map((item, idx) => (
                                     <span key={idx} style={{ background: idx === 0 ? "rgba(168, 85, 247, 0.3)" : "rgba(168, 85, 247, 0.15)", color: idx === 0 ? "#e9d5ff" : "#d8b4fe", border: "1px solid rgba(168, 85, 247, 0.4)", borderRadius: 4, padding: "1px 6px", fontWeight: 700, fontFamily: "var(--font-mono)", fontSize: "0.72rem" }}>
-                                      {typeof item === "object" ? JSON.stringify(item) : String(item)}
+                                      {formatPQItem(item)}
                                     </span>
                                   ))}
                                 </div>
