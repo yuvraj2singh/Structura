@@ -66,7 +66,8 @@ CRITICAL RULE: Two Sum, Binary Search, Bubble Sort, Merge Sort, Quick Sort, Two 
 
 STEP 2 — Generate representative test data (MAXIMUM 4x4 or 3x4 for 2D matrix, 6-8 elements for 1D/stack/tree). For 2D character matrix, space-separate each row on a new line (e.g. "X O X X\nO X O X\nX O X X").
 
-STEP 3 — Simulate execution step by step accurately (MAXIMUM 6 to 10 key steps). Keep descriptions concise (under 20 words each).
+STEP 3 — Simulate execution step by step with high granular clarity and precision (GENERATE 20 TO 30 DETAILED STEPS).
+Walk through every loop iteration, index check, condition evaluation, state change, pointer movement, element comparison, swap, and recursive call step by step. Each step must have a clear, informative description (under 25 words).
 
 STEP 4 — REAL-TIME CANVAS MUTATIONS (CRITICAL):
 Whenever the algorithm updates values in a data structure (e.g. board[r][c] = '#', swapping array elements, changing 'O' -> 'X' or '#' -> 'O'):
@@ -126,7 +127,8 @@ ${code.trim()}
 \`\`\`
 
 Analyze this code, detect ALL data structures used (including primary and any secondary structures such as 2D Grid + Call Stack, Array + Hash Map, Graph + Queue, etc.). If the code manipulates a 2D matrix (vector<vector<char>>, int[][], etc.), the structureType MUST be 'array2d'.
-CRITICAL: For every step where values in the data structure change (e.g. board[r][c] = '#' or converting surrounded 'O' -> 'X' and safe '#' -> 'O'), you MUST specify the 'mutations' array with target (e.g. "[r][c]") and value (e.g. "#", "X", or "O") so the board cells change their values in real time on the canvas! Keep simulation to 6-10 concise steps.`;
+CRITICAL: For every step where values in the data structure change (e.g. board[r][c] = '#' or converting surrounded 'O' -> 'X' and safe '#' -> 'O'), you MUST specify the 'mutations' array with target (e.g. "[r][c]") and value (e.g. "#", "X", or "O") so the board cells change their values in real time on the canvas!
+Provide a comprehensive, granular step-by-step dry-run of 20 to 30 steps covering the algorithm execution from start to finish with complete clarity.`;
     let responseJson = null;
     let lastError = null;
 
@@ -138,12 +140,12 @@ CRITICAL: For every step where values in the data structure change (e.g. board[r
           generationConfig: {
             responseMimeType: "application/json",
             temperature: 0.1, // Very low — we want deterministic accurate output
-            maxOutputTokens: 2048,
+            maxOutputTokens: 8192,
           },
         });
 
         // Per-model timeout to avoid hanging (allow adequate time for deep code analysis)
-        const timeoutMs = 45000;
+        const timeoutMs = 65000;
         const fetchPromise = model.generateContent(userPrompt);
         const timeoutPromise = new Promise((_, reject) =>
           setTimeout(() => reject(new Error(`Model ${modelId} timed out after ${timeoutMs}ms`)), timeoutMs)

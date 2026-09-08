@@ -858,9 +858,30 @@ export default function DSAPanel({ onClose, onBroadcastBatch }) {
                     </div>
                   </div>
 
-                  {/* Progress bar */}
-                  <div style={{ marginTop: 8, height: 3, background: "var(--border-color)", borderRadius: 2, overflow: "hidden" }}>
-                    <div style={{ height: "100%", width: `${((stepIdx + 1) / steps.length) * 100}%`, background: "var(--accent)", transition: "width 150ms ease" }} />
+                  {/* Step Scrubber Slider */}
+                  <div style={{ marginTop: 10 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.65rem", color: "var(--text-tertiary)", marginBottom: 2 }}>
+                      <span>Start</span>
+                      <span>Scrub Steps</span>
+                      <span>End</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max={steps.length - 1}
+                      value={stepIdx}
+                      onChange={(e) => {
+                        setPlaying(false);
+                        setStepIdx(Number(e.target.value));
+                      }}
+                      style={{
+                        width: "100%",
+                        height: 4,
+                        accentColor: "var(--accent)",
+                        cursor: "pointer",
+                      }}
+                      title={`Scrub to step ${stepIdx + 1} of ${steps.length}`}
+                    />
                   </div>
                 </div>
               </div>
