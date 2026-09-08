@@ -313,32 +313,28 @@ CRITICAL REQUIREMENTS:
     }
 
     // 4. Ensure structures array is populated and sanitized
-    if (!Array.isArray(responseJson.structures) || responseJson.structures.length === 0) {
-      responseJson.structures = [
-        {
-          name: responseJson.dataStructuresUsed[0] || responseJson.structureType,
-          type: responseJson.structureType,
-          initialInput: responseJson.initialInput,
-        },
-      ];
-    } else {
-      responseJson.structures = responseJson.structures
-        .filter((s) => s && VALID_STRUCTURE_TYPES.includes(s.type) && typeof s.initialInput === "string" && s.initialInput.trim())
-        .slice(0, 3)
-        .map((s) => ({
-          name: s.name || s.type,
-          type: s.type,
-          initialInput: s.initialInput.trim(),
-        }));
-      if (responseJson.structures.length === 0) {
-        responseJson.structures = [
-          {
-            name: responseJson.dataStructuresUsed[0] || responseJson.structureType,
-            type: responseJson.structureType,
-            initialInput: responseJson.initialInput,
-          },
-        ];
-      }
+    if (!Array.isArray(responseJson.structures)) {
+      responseJson.structures = [];
+    }
+
+    // Filter out invalid or empty structures
+    responseJson.structures = responseJson.structures
+      .filter((s) => s && VALID_STRUCTURE_TYPES.includes(s.type) && typeof s.initialInput === "string" && s.initialInput.trim() && s.initialInput.trim() !== "[]" && s.initialInput.trim() !== "{}")
+      .slice(0, 3)
+      .map((s) => ({
+        name: s.name || s.type,
+        type: s.type,
+        initialInput: s.initialInput.trim(),
+      }));
+
+    // Ensure the primary structure is always present as the FIRST entry in structures
+    const hasPrimary = responseJson.structures.some((s) => s.type === responseJson.structureType);
+    if (!hasPrimary) {
+      responseJson.structures.unshift({
+        name: responseJson.dataStructuresUsed?.[0] || (responseJson.structureType === "graph" ? "Graph (Adjacency)" : responseJson.structureType),
+        type: responseJson.structureType,
+        initialInput: responseJson.initialInput,
+      });
     }
 
     // 3. Trim initialInput to max 20 elements
@@ -349,13 +345,15 @@ CRITICAL REQUIREMENTS:
       }
     }
 
-    // 4. Ensure steps array exists
-    if (!Array.isArray(responseJson.steps) || responseJson.steps.length === 0) {
+    // 4. Ensure steps array exists (checking alternate keys if needed)
+    const rawSteps = responseJson.steps || responseJson.dryRun || responseJson.trace || responseJson.simulation || responseJson.executionSteps || [];
+    if (!Array.isArray(rawSteps) || rawSteps.length === 0) {
       return NextResponse.json({
         error: "AI returned an empty simulation. Please try again.",
         retryable: true,
       }, { status: 503 });
     }
+    responseJson.steps = rawSteps;
 
     // 5. Sanitize each step — ensure graph state tracking, highlights, mutations, and snapshots are preserved
     let lastVisited = [];

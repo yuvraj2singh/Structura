@@ -322,15 +322,28 @@ export default function DSAPanel({ onClose, onBroadcastBatch }) {
       let allEls = [];
       for (const struct of structuresToRender) {
         if (!struct.type || !struct.initialInput) continue;
-        const els = renderOnCanvas(
-          struct.type,
-          struct.initialInput,
-          {
-            ...(data.graphOptions || {}),
-            label: struct.name || STRUCT_TYPE_LABELS[struct.type] || struct.type,
-          }
-        );
-        allEls = allEls.concat(els);
+        try {
+          const els = renderOnCanvas(
+            struct.type,
+            struct.initialInput,
+            {
+              ...(data.graphOptions || {}),
+              label: struct.name || STRUCT_TYPE_LABELS[struct.type] || struct.type,
+            }
+          );
+          allEls = allEls.concat(els);
+        } catch (err) {
+          console.warn(`[DSAPanel] Could not render structure ${struct.type}:`, err.message);
+        }
+      }
+
+      // If all structures failed, fallback to primary structureType with initialInput
+      if (allEls.length === 0 && data.structureType && data.initialInput) {
+        try {
+          allEls = renderOnCanvas(data.structureType, data.initialInput, data.graphOptions || {});
+        } catch (e) {
+          console.warn("[DSAPanel] Primary structure fallback failed:", e.message);
+        }
       }
 
       initialElementsRef.current = new Map(allEls.map((e) => [e.id, { ...(e.data || {}) }]));
@@ -338,7 +351,6 @@ export default function DSAPanel({ onClose, onBroadcastBatch }) {
       setAnalysisResult(data);
       setSteps(data.steps);
       setStepIdx(0);
-      const dsCount = data.dataStructuresUsed?.length || 1;
       toast.success(`Detected: ${data.dataStructuresUsed?.join(" + ") || STRUCT_TYPE_LABELS[data.structureType] || data.structureType}`);
     } catch (e) {
       setCodeError(e.message || "Analysis failed");
@@ -960,10 +972,67 @@ export default function DSAPanel({ onClose, onBroadcastBatch }) {
                           </div>
                         )}
 
-                        {/* 5. General variables row */}
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 12px", fontFamily: "var(--font-mono)", fontSize: "0.75rem", paddingTop: (curStep.variables.queue || curStep.variables.visited || curStep.variables.stack || curStep.variables.order) ? 4 : 0 }}>
+                        {/* 5. Priority Queue / Min-Heap for Dijkstra */}
+                        {(curStep.variables.pq !== undefined || curStep.variables.priority_queue !== undefined) && (
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", background: "rgba(168, 85, 247, 0.08)", border: "1px solid rgba(168, 85, 247, 0.25)", borderRadius: 6, padding: "4px 8px", fontSize: "0.74rem" }}>
+                            <span style={{ fontWeight: 700, color: "#c084fc", fontFamily: "var(--font-mono)", fontSize: "0.7rem", textTransform: "uppercase" }}>Min-Heap (PQ):</span>
+                            <span style={{ fontSize: "0.65rem", color: "var(--text-tertiary)" }}>top ➔</span>
+                            {(() => {
+                              const pqVal = curStep.variables.pq ?? curStep.variables.priority_queue;
+                              const items = Array.isArray(pqVal) ? pqVal : (typeof pqVal === "string" ? [pqVal] : []);
+                              return items.length > 0 ? (
+                                <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
+                                  {items.map((item, idx) => (
+                                    <span key={idx} style={{ background: idx === 0 ? "rgba(168, 85, 247, 0.3)" : "rgba(168, 85, 247, 0.15)", color: idx === 0 ? "#e9d5ff" : "#d8b4fe", border: "1px solid rgba(168, 85, 247, 0.4)", borderRadius: 4, padding: "1px 6px", fontWeight: 700, fontFamily: "var(--font-mono)", fontSize: "0.72rem" }}>
+                                      {typeof item === "object" ? JSON.stringify(item) : String(item)}
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span style={{ color: "var(--text-tertiary)", fontStyle: "italic", fontSize: "0.7rem" }}>[ empty ]</span>
+                              );
+                            })()}
+                          </div>
+                        )}
+
+                        {/* 6. Distance array/map for Dijkstra / Shortest Path */}
+                        {(curStep.variables.dist !== undefined || curStep.variables.distance !== undefined) && (
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", background: "rgba(14, 165, 233, 0.08)", border: "1px solid rgba(14, 165, 233, 0.25)", borderRadius: 6, padding: "4px 8px", fontSize: "0.74rem" }}>
+                            <span style={{ fontWeight: 700, color: "#38bdf8", fontFamily: "var(--font-mono)", fontSize: "0.7rem", textTransform: "uppercase" }}>Distances:</span>
+                            {(() => {
+                              const dVal = curStep.variables.dist ?? curStep.variables.distance;
+                              if (Array.isArray(dVal)) {
+                                return (
+                                  <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
+                                    {dVal.map((d, nodeIdx) => (
+                                      <span key={nodeIdx} style={{ background: "rgba(14, 165, 233, 0.15)", color: "#7dd3fc", border: "1px solid rgba(14, 165, 233, 0.35)", borderRadius: 4, padding: "1px 6px", fontFamily: "var(--font-mono)", fontSize: "0.72rem" }}>
+                                        <span style={{ color: "var(--text-tertiary)", marginRight: 2 }}>{nodeIdx}:</span>
+                                        <strong>{String(d)}</strong>
+                                      </span>
+                                    ))}
+                                  </div>
+                                );
+                              } else if (typeof dVal === "object" && dVal !== null) {
+                                return (
+                                  <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
+                                    {Object.entries(dVal).map(([node, d]) => (
+                                      <span key={node} style={{ background: "rgba(14, 165, 233, 0.15)", color: "#7dd3fc", border: "1px solid rgba(14, 165, 233, 0.35)", borderRadius: 4, padding: "1px 6px", fontFamily: "var(--font-mono)", fontSize: "0.72rem" }}>
+                                        <span style={{ color: "var(--text-tertiary)", marginRight: 2 }}>{node}:</span>
+                                        <strong>{String(d)}</strong>
+                                      </span>
+                                    ))}
+                                  </div>
+                                );
+                              }
+                              return <strong style={{ color: "var(--text-primary)" }}>{String(dVal)}</strong>;
+                            })()}
+                          </div>
+                        )}
+
+                        {/* 7. General variables row */}
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 12px", fontFamily: "var(--font-mono)", fontSize: "0.75rem", paddingTop: (curStep.variables.queue || curStep.variables.visited || curStep.variables.stack || curStep.variables.order || curStep.variables.pq || curStep.variables.dist) ? 4 : 0 }}>
                           {Object.entries(curStep.variables)
-                            .filter(([k]) => !["queue", "visited", "stack", "order"].includes(k.toLowerCase()))
+                            .filter(([k]) => !["queue", "visited", "stack", "order", "pq", "priority_queue", "dist", "distance"].includes(k.toLowerCase()))
                             .map(([k, v]) => {
                               const isCurrent = ["curr", "current", "node", "u"].includes(k.toLowerCase());
                               const isNeighbor = ["nb", "neighbor", "nbr", "v"].includes(k.toLowerCase());
