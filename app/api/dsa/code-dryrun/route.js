@@ -6,6 +6,82 @@ const PRIMARY_MODEL = process.env.GEMINI_MODEL || "gemini-3.5-flash";
 /** All valid structure types we can render on the canvas */
 const VALID_STRUCTURE_TYPES = ["array", "graph", "tree", "stack", "queue", "list", "array2d", "heap"];
 
+/**
+ * Safely parse JSON from LLMs, automatically recovering from output truncation
+ * (e.g., when the token limit is hit mid-string or mid-step).
+ */
+function repairTruncatedJson(str) {
+  if (!str || typeof str !== "string") return null;
+  const cleaned = str.replace(/^```json\s*/i, "").replace(/```\s*$/i, "").trim();
+
+  // 1. Standard parse first
+  try {
+    return JSON.parse(cleaned);
+  } catch (initialErr) {
+    // 2. Scan for last fully-closed step in "steps" array
+    try {
+      let lastValidStepIndex = -1;
+      let inString = false;
+      let escaped = false;
+      const stack = [];
+
+      for (let i = 0; i < cleaned.length; i++) {
+        const ch = cleaned[i];
+        if (escaped) { escaped = false; continue; }
+        if (ch === "\\") { escaped = true; continue; }
+        if (ch === "\"") { inString = !inString; continue; }
+        if (!inString) {
+          if (ch === "{" || ch === "[") {
+            stack.push({ char: ch, index: i });
+          } else if (ch === "}" || ch === "]") {
+            const top = stack[stack.length - 1];
+            if ((ch === "}" && top?.char === "{") || (ch === "]" && top?.char === "[")) {
+              stack.pop();
+              // When a step object inside steps array completes (depth is 2: root { and steps [)
+              if (ch === "}" && stack.length === 2 && stack[0].char === "{" && stack[1].char === "[") {
+                lastValidStepIndex = i;
+              }
+            }
+          }
+        }
+      }
+
+      if (lastValidStepIndex !== -1) {
+        const candidate = cleaned.slice(0, lastValidStepIndex + 1) + "]}";
+        return JSON.parse(candidate);
+      }
+    } catch {}
+
+    // 3. Fallback: backwards search for last valid brace
+    try {
+      for (let end = cleaned.lastIndexOf("}"); end > 0; end = cleaned.lastIndexOf("}", end - 1)) {
+        try {
+          const candidate = cleaned.slice(0, end + 1);
+          let ob = 0, obr = 0, is = false, esc = false;
+          for (let i = 0; i < candidate.length; i++) {
+            const ch = candidate[i];
+            if (esc) { esc = false; continue; }
+            if (ch === "\\") { esc = true; continue; }
+            if (ch === "\"") { is = !is; continue; }
+            if (!is) {
+              if (ch === "[") ob++;
+              else if (ch === "]") ob--;
+              else if (ch === "{") obr++;
+              else if (ch === "}") obr--;
+            }
+          }
+          let cl = "";
+          while (ob > 0) { cl += "]"; ob--; }
+          while (obr > 0) { cl += "}"; obr--; }
+          return JSON.parse(candidate + cl);
+        } catch {}
+      }
+    } catch {}
+
+    throw initialErr;
+  }
+}
+
 export async function POST(request) {
   try {
     const apiKey = process.env.GEMINI_API_KEY;
@@ -66,11 +142,11 @@ CRITICAL RULE: Two Sum, Binary Search, Bubble Sort, Merge Sort, Quick Sort, Two 
 
 STEP 2 — Generate representative test data (MAXIMUM 4x4 or 3x4 for 2D matrix, 6-8 elements for 1D/stack/tree). For 2D character matrix, space-separate each row on a new line (e.g. "X O X X\nO X O X\nX O X X").
 
-STEP 3 — SIMULATE THE COMPLETE, EXHAUSTIVE DRY RUN FROM INITIAL CALL TO FINAL TERMINATION:
-- Do NOT abbreviate, summarize, or stop early. Simulate as many sequential steps as required (generate 35 to 60+ detailed steps) to complete the ENTIRE algorithm execution.
-- Trace every single line hit: each loop iteration (inner and outer loops), pointer advance (left/right, low/high, i/j), array index inspection, condition check (true/false evaluation), swap, state assignment, recursion push, and return value.
-- The dry run MUST proceed until the algorithm reaches its natural conclusion (e.g. array is 100% sorted, search target is found or search space exhausted, traversal visits all reachable nodes, recursion unwinds completely).
-- Keep descriptions concise and punchy (10–20 words per step) so the JSON is dense, crisp, and informative.
+STEP 3 — SIMULATE THE COMPLETE, GRANULAR DRY RUN:
+- Trace every single line hit: loop iterations, pointer advances, condition evaluations (true/false), state updates, and queue/stack changes.
+- Generate between 20 to 35 comprehensive sequential steps (maximum 40 steps) to complete the algorithm execution without exceeding token limits.
+- Keep descriptions concise and punchy (under 15 words per step).
+- Only include "dataSnapshot" on steps where values in the data structure actually change. Do NOT repeat redundant snapshots.
 
 STEP 4 — REAL-TIME CANVAS MUTATIONS (CRITICAL):
 Whenever the algorithm updates values in a data structure (e.g. board[r][c] = '#', swapping array elements, changing 'O' -> 'X' or '#' -> 'O'):
@@ -163,7 +239,7 @@ ${code.trim()}
 
 Analyze this code and detect ALL data structures used (primary and secondary).
 CRITICAL REQUIREMENTS:
-1. Complete Dry-Run: Simulate the ENTIRE algorithm execution from start to finish without skipping or summarizing iterations. Generate as many detailed, granular steps as necessary (35 to 60+ steps) until the algorithm completely finishes.
+1. Complete Dry-Run: Simulate the algorithm execution with 20 to 35 granular, complete steps (maximum 40 steps) until the algorithm finishes.
 2. GRAPH ACCURACY (BFS/DFS/Dijkstra):
    - For graph traversals, you MUST accurately maintain and update "visited" (array of visited nodes) and "queue" (exact array of queued nodes in FIFO order) in "variables" on EVERY single step!
    - When a node is popped from the queue, immediately remove it from "queue". When a neighbor is added to the queue, immediately append it to "queue". When marked visited, immediately add it to "visited" and keep it in all subsequent steps.
@@ -194,13 +270,13 @@ CRITICAL REQUIREMENTS:
         const text = result?.response?.text();
         if (text) {
           try {
-            responseJson = JSON.parse(text);
-          } catch {
-            // Strip any accidental markdown wrapping
-            const cleaned = text.replace(/^```json\s*/i, "").replace(/```\s*$/i, "").trim();
-            responseJson = JSON.parse(cleaned);
+            responseJson = repairTruncatedJson(text);
+            if (responseJson) break;
+          } catch (parseErr) {
+            console.warn(`[code-dryrun] JSON repair failed for model ${modelId}:`, parseErr.message);
+            lastError = parseErr;
+            continue;
           }
-          break;
         }
       } catch (err) {
         console.error(`[code-dryrun] Model ${modelId} failed:`, err.message);
