@@ -349,6 +349,7 @@ export default function DSAPanel({ onClose, onBroadcastBatch }) {
   };
 
   // ── Highlight matching ─────────────────────────────
+  // ── Highlight matching ─────────────────────────────
   const syncHighlight = useCallback((step, els) => {
     if (!step || !els.length) { clearHighlights(); return; }
     const highlights = step.highlights || [];
@@ -356,7 +357,34 @@ export default function DSAPanel({ onClose, onBroadcastBatch }) {
 
     const ids = [];
     highlights.forEach((hl) => {
-      // 1. If hl is an object with r/row and c/col (e.g. { r: 1, c: 2 })
+      if (hl === null || hl === undefined) return;
+
+      // 1. Edge match: string like "1-2", "1->2", "1 - 2" or array [1, 2]
+      if (typeof hl === "string") {
+        const edgeMatch = hl.match(/^([^-–→>:\s]+)\s*(?:-|–|→|>|->)\s*([^-–→>:\s]+)$/);
+        if (edgeMatch) {
+          const u = edgeMatch[1].trim();
+          const v = edgeMatch[2].trim();
+          const matchEdge = els.find((e) =>
+            (String(e.data?.from) === u && String(e.data?.to) === v) ||
+            (!e.data?.directed && String(e.data?.from) === v && String(e.data?.to) === u) ||
+            e.data?.edgeId === `${u}-${v}` ||
+            (!e.data?.directed && e.data?.edgeId === `${v}-${u}`)
+          );
+          if (matchEdge) { ids.push(matchEdge.id); return; }
+        }
+      }
+      if (Array.isArray(hl) && hl.length === 2 && els.some((e) => e.data?.from !== undefined)) {
+        const u = String(hl[0]).trim();
+        const v = String(hl[1]).trim();
+        const matchEdge = els.find((e) =>
+          (String(e.data?.from) === u && String(e.data?.to) === v) ||
+          (!e.data?.directed && String(e.data?.from) === v && String(e.data?.to) === u)
+        );
+        if (matchEdge) { ids.push(matchEdge.id); return; }
+      }
+
+      // 2. If hl is an object with r/row and c/col (e.g. { r: 1, c: 2 })
       if (hl && typeof hl === "object" && !Array.isArray(hl)) {
         const r = hl.r ?? hl.row;
         const c = hl.c ?? hl.col;
@@ -366,14 +394,14 @@ export default function DSAPanel({ onClose, onBroadcastBatch }) {
         }
       }
 
-      // 2. If hl is a coordinate array [r, c]
+      // 3. If hl is a coordinate array [r, c]
       if (Array.isArray(hl) && hl.length === 2) {
         const [r, c] = hl;
         const match = els.find((e) => e.data?.row === Number(r) && e.data?.col === Number(c));
         if (match) { ids.push(match.id); return; }
       }
 
-      // 3. If hl is a string coordinate like "[1][2]" or "[1, 2]" or "1,2"
+      // 4. If hl is a string coordinate like "[1][2]" or "[1, 2]" or "1,2"
       if (typeof hl === "string") {
         const coordMatch = hl.match(/\[?(\d+)[,\s\]\[]+(\d+)\]?/);
         if (coordMatch) {
@@ -384,7 +412,18 @@ export default function DSAPanel({ onClose, onBroadcastBatch }) {
         }
       }
 
-      // 4. Try 2D index match or flatIndex / 1D index
+      // 5. Try Graph node match by nodeId, label, id, or graph-node-id
+      const hlStr = String(hl).trim();
+      const nodeMatch = els.find((e) =>
+        String(e.data?.nodeId) === hlStr ||
+        String(e.data?.label) === hlStr ||
+        String(e.data?.id) === hlStr ||
+        e.id === hlStr ||
+        e.id === `graph-node-${hlStr}`
+      );
+      if (nodeMatch) { ids.push(nodeMatch.id); return; }
+
+      // 6. Try 2D index match or flatIndex / 1D index
       const asNum = Number(hl);
       if (!isNaN(asNum)) {
         const byFlat = els.find((e) => e.data?.flatIndex === asNum);
@@ -393,17 +432,17 @@ export default function DSAPanel({ onClose, onBroadcastBatch }) {
         if (byIdx) { ids.push(byIdx.id); return; }
       }
 
-      // 5. Try exact index string match (e.g., e.data?.index === hl)
+      // 7. Try exact index string match (e.g., e.data?.index === hl)
       const byIdxStr = els.find((e) => String(e.data?.index) === String(hl));
       if (byIdxStr) { ids.push(byIdxStr.id); return; }
 
-      // 6. Try value / label match
+      // 8. Try value / label match
       const byVal = els.find(
         (e) => String(e.data?.value) === String(hl) || String(e.data?.id) === String(hl)
       );
       if (byVal) { ids.push(byVal.id); return; }
 
-      // 7. Positional fallback for elements
+      // 9. Positional fallback for elements
       if (!isNaN(asNum) && els[asNum]) {
         ids.push(els[asNum].id);
       }
@@ -458,6 +497,21 @@ export default function DSAPanel({ onClose, onBroadcastBatch }) {
         const byIdx = createdEls.find((e) => e.data?.index === asNum);
         if (byIdx) return byIdx;
       }
+
+      // Graph node match by nodeId, label, value, or element id
+      const targetStr = String(target).trim();
+      if (targetStr) {
+        const byNode = createdEls.find((e) =>
+          String(e.data?.nodeId) === targetStr ||
+          String(e.data?.label) === targetStr ||
+          String(e.data?.value) === targetStr ||
+          String(e.data?.id) === targetStr ||
+          e.id === targetStr ||
+          e.id === `graph-node-${targetStr}`
+        );
+        if (byNode) return byNode;
+      }
+
       return null;
     };
 
@@ -819,18 +873,111 @@ export default function DSAPanel({ onClose, onBroadcastBatch }) {
 
                   {/* Variables */}
                   {curStep?.variables && Object.keys(curStep.variables).length > 0 && (
-                    <div style={{ background: "var(--bg-primary)", padding: "6px 8px", borderRadius: 6, border: "1px solid var(--border-subtle)", marginBottom: 10 }}>
-                      <div style={{ fontSize: "0.63rem", fontWeight: 700, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>
-                        Live Variables
-                      </div>
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 14px", fontFamily: "var(--font-mono)", fontSize: "0.75rem" }}>
-                        {Object.entries(curStep.variables).map(([k, v]) => (
-                          <span key={k}>
-                            <span style={{ color: "var(--accent)" }}>{k}</span>
-                            {" = "}
-                            <strong style={{ color: "var(--text-primary)" }}>{String(v)}</strong>
+                    <div style={{ background: "var(--bg-primary)", padding: "8px 10px", borderRadius: 8, border: "1px solid var(--border-subtle)", marginBottom: 10 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                        <span style={{ fontSize: "0.63rem", fontWeight: 700, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                          Live State & Variables
+                        </span>
+                        {curStep.variables.visited && (
+                          <span style={{ fontSize: "0.62rem", color: "#10b981", fontWeight: 600 }}>
+                            {Array.isArray(curStep.variables.visited) ? curStep.variables.visited.length : 1} visited
                           </span>
-                        ))}
+                        )}
+                      </div>
+
+                      {/* Special Graph / DSA State Rows */}
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                        {/* 1. Queue visualization if present */}
+                        {curStep.variables.queue !== undefined && (
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", background: "rgba(99, 102, 241, 0.08)", border: "1px solid rgba(99, 102, 241, 0.2)", borderRadius: 6, padding: "4px 8px", fontSize: "0.74rem" }}>
+                            <span style={{ fontWeight: 700, color: "#818cf8", fontFamily: "var(--font-mono)", fontSize: "0.7rem", textTransform: "uppercase" }}>Queue:</span>
+                            <span style={{ fontSize: "0.65rem", color: "var(--text-tertiary)" }}>front ➔</span>
+                            {Array.isArray(curStep.variables.queue) && curStep.variables.queue.length > 0 ? (
+                              <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
+                                {curStep.variables.queue.map((item, idx) => (
+                                  <span key={idx} style={{ background: idx === 0 ? "rgba(99, 102, 241, 0.3)" : "rgba(99, 102, 241, 0.15)", color: idx === 0 ? "#c7d2fe" : "#a5b4fc", border: "1px solid rgba(99, 102, 241, 0.4)", borderRadius: 4, padding: "1px 6px", fontWeight: 700, fontFamily: "var(--font-mono)", fontSize: "0.72rem" }}>
+                                    {String(item)}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : (
+                              <span style={{ color: "var(--text-tertiary)", fontStyle: "italic", fontSize: "0.7rem" }}>[ empty ]</span>
+                            )}
+                            <span style={{ fontSize: "0.65rem", color: "var(--text-tertiary)" }}>➔ back</span>
+                          </div>
+                        )}
+
+                        {/* 2. Visited set visualization if present */}
+                        {curStep.variables.visited !== undefined && (
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", background: "rgba(16, 185, 129, 0.08)", border: "1px solid rgba(16, 185, 129, 0.2)", borderRadius: 6, padding: "4px 8px", fontSize: "0.74rem" }}>
+                            <span style={{ fontWeight: 700, color: "#34d399", fontFamily: "var(--font-mono)", fontSize: "0.7rem", textTransform: "uppercase" }}>Visited:</span>
+                            {Array.isArray(curStep.variables.visited) && curStep.variables.visited.length > 0 ? (
+                              <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
+                                <span style={{ color: "var(--text-tertiary)" }}>{'{'}</span>
+                                {curStep.variables.visited.map((item, idx) => (
+                                  <span key={idx} style={{ background: "rgba(16, 185, 129, 0.2)", color: "#6ee7b7", border: "1px solid rgba(16, 185, 129, 0.35)", borderRadius: 4, padding: "1px 6px", fontWeight: 700, fontFamily: "var(--font-mono)", fontSize: "0.72rem" }}>
+                                    {String(item)}
+                                  </span>
+                                ))}
+                                <span style={{ color: "var(--text-tertiary)" }}>{'}'}</span>
+                              </div>
+                            ) : (
+                              <span style={{ color: "var(--text-tertiary)", fontSize: "0.7rem" }}>{'{ }'}</span>
+                            )}
+                          </div>
+                        )}
+
+                        {/* 3. Stack visualization if present */}
+                        {curStep.variables.stack !== undefined && (
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", background: "rgba(245, 158, 11, 0.08)", border: "1px solid rgba(245, 158, 11, 0.2)", borderRadius: 6, padding: "4px 8px", fontSize: "0.74rem" }}>
+                            <span style={{ fontWeight: 700, color: "#fbbf24", fontFamily: "var(--font-mono)", fontSize: "0.7rem", textTransform: "uppercase" }}>Stack:</span>
+                            <span style={{ fontSize: "0.65rem", color: "var(--text-tertiary)" }}>top ➔</span>
+                            {Array.isArray(curStep.variables.stack) && curStep.variables.stack.length > 0 ? (
+                              <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
+                                {curStep.variables.stack.map((item, idx) => (
+                                  <span key={idx} style={{ background: idx === curStep.variables.stack.length - 1 ? "rgba(245, 158, 11, 0.3)" : "rgba(245, 158, 11, 0.15)", color: idx === curStep.variables.stack.length - 1 ? "#fef08a" : "#fde047", border: "1px solid rgba(245, 158, 11, 0.4)", borderRadius: 4, padding: "1px 6px", fontWeight: 700, fontFamily: "var(--font-mono)", fontSize: "0.72rem" }}>
+                                    {String(item)}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : (
+                              <span style={{ color: "var(--text-tertiary)", fontStyle: "italic", fontSize: "0.7rem" }}>[ empty ]</span>
+                            )}
+                          </div>
+                        )}
+
+                        {/* 4. Traversal order if present */}
+                        {curStep.variables.order !== undefined && Array.isArray(curStep.variables.order) && (
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", background: "var(--bg-secondary)", border: "1px solid var(--border-subtle)", borderRadius: 6, padding: "4px 8px", fontSize: "0.74rem" }}>
+                            <span style={{ fontWeight: 700, color: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontSize: "0.7rem", textTransform: "uppercase" }}>Order:</span>
+                            {curStep.variables.order.length > 0 ? (
+                              <span style={{ color: "var(--text-primary)", fontFamily: "var(--font-mono)", fontWeight: 600 }}>
+                                {curStep.variables.order.join(" ➔ ")}
+                              </span>
+                            ) : (
+                              <span style={{ color: "var(--text-tertiary)", fontStyle: "italic" }}>[ none ]</span>
+                            )}
+                          </div>
+                        )}
+
+                        {/* 5. General variables row */}
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 12px", fontFamily: "var(--font-mono)", fontSize: "0.75rem", paddingTop: (curStep.variables.queue || curStep.variables.visited || curStep.variables.stack || curStep.variables.order) ? 4 : 0 }}>
+                          {Object.entries(curStep.variables)
+                            .filter(([k]) => !["queue", "visited", "stack", "order"].includes(k.toLowerCase()))
+                            .map(([k, v]) => {
+                              const isCurrent = ["curr", "current", "node", "u"].includes(k.toLowerCase());
+                              const isNeighbor = ["nb", "neighbor", "nbr", "v"].includes(k.toLowerCase());
+                              return (
+                                <span key={k} style={{ display: "inline-flex", alignItems: "center", gap: 3, background: isCurrent ? "rgba(99, 102, 241, 0.12)" : isNeighbor ? "rgba(245, 158, 11, 0.12)" : "transparent", padding: (isCurrent || isNeighbor) ? "1px 6px" : "0", borderRadius: 4 }}>
+                                  <span style={{ color: isCurrent ? "#818cf8" : isNeighbor ? "#fbbf24" : "var(--accent)", fontWeight: (isCurrent || isNeighbor) ? 700 : 500 }}>{k}</span>
+                                  <span style={{ color: "var(--text-tertiary)" }}>=</span>
+                                  <strong style={{ color: "var(--text-primary)" }}>
+                                    {Array.isArray(v) ? `[${v.join(", ")}]` : (typeof v === "object" && v !== null ? JSON.stringify(v) : String(v))}
+                                  </strong>
+                                </span>
+                              );
+                            })}
+                        </div>
                       </div>
                     </div>
                   )}

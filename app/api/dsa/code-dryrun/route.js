@@ -78,26 +78,58 @@ You MUST include "mutations" in that step so the canvas visually updates the cel
 Format: "mutations": [ { "target": "[r][c]" or flat index, "value": "#" } ]
 Optionally also provide "dataSnapshot": string with full updated matrix rows or array elements.
 
+STEP 5 — SPECIAL MANDATORY GRAPH EXECUTION PROTOCOL (BFS, DFS, DIJKSTRA, ETC.):
+When the algorithm traverses or processes a Graph:
+1. structureType MUST be "graph".
+2. initialInput MUST represent the graph edges, e.g. "1 2\n1 3\n2 1\n2 3\n3 1\n3 2\n3 4\n4 3" or "1-2, 1-3, 2-3, 3-4" or "[[1,2],[1,3],[2,3],[3,4]]".
+3. Provide secondary structure in "structures":
+   - If BFS: { "name": "Queue (FIFO)", "type": "queue", "initialInput": "1" }
+   - If DFS: { "name": "Call Stack", "type": "stack", "initialInput": "dfs(1)" }
+4. VARIABLES TRACKING (MANDATORY & 100% ACCURATE FOR EVERY SINGLE STEP):
+   Every single step MUST accurately report:
+   - "visited": An array of all nodes visited so far (e.g. [1], then [1, 2], then [1, 2, 3]). Once a node is marked visited, it must NEVER disappear from "visited" in subsequent steps!
+   - "queue": For BFS, an array showing the EXACT current queue contents in order (e.g. [1] -> after pop: [] -> after enqueuing neighbors: [2, 3] -> after popping 2: [3] -> after enqueuing 4: [3, 4]). Pop removes the head element; append adds to the tail. It must reflect the actual queue at that exact line of code!
+   - "stack": For DFS, an array showing the active recursion/call stack (e.g. ["dfs(1)", "dfs(2)"]).
+   - "current" or "node": The node currently popped or being expanded (e.g. 1).
+   - "neighbor" or "nb": The neighbor currently being evaluated in the adjacency loop.
+   - "order": An array of nodes in traversal order (e.g. [1, 2, 3, 4]).
+5. GRANULARITY FOR GRAPH BFS/DFS:
+   - Step: Enqueue start node and add to visited -> variables: { visited: [1], queue: [1], order: [] }
+   - Step: Check while queue condition
+   - Step: Pop front node -> variables: { node: 1, visited: [1], queue: [], order: [] }
+   - Step: Add node to order -> variables: { node: 1, visited: [1], queue: [], order: [1] }
+   - Step: Inspect neighbor 2 -> variables: { node: 1, nb: 2, visited: [1], queue: [], order: [1] }
+   - Step: Check "if 2 not in visited" -> True -> mark visited and enqueue -> variables: { node: 1, nb: 2, visited: [1, 2], queue: [2], order: [1] }
+   - Step: Inspect neighbor 3 -> variables: { node: 1, nb: 3, visited: [1, 2], queue: [2], order: [1] }
+   - Step: Check "if 3 not in visited" -> True -> mark visited and enqueue -> variables: { node: 1, nb: 3, visited: [1, 2, 3], queue: [2, 3], order: [1] }
+   - Step: Next queue iteration: pop front node 2 -> variables: { node: 2, visited: [1, 2, 3], queue: [3], order: [1] }
+   - Step: For neighbor 1 of node 2 -> "1 already in visited, skip!" -> variables: { node: 2, nb: 1, visited: [1, 2, 3], queue: [3], order: [1, 2] }
+   - Continue until the queue is empty!
+6. HIGHLIGHTS FOR GRAPHS:
+   - Highlight the current node being processed (e.g. ["1"]).
+   - When inspecting an edge or neighbor: highlight both node and neighbor, or edge (e.g. ["1", "2"] or ["1-2"]).
+   - Use highlightColor: "#6366f1" for current node, "#f59e0b" for checking neighbor, "#10b981" for enqueued/visited, "#ef4444" for already visited (skipped).
+
 Output MUST be a valid JSON object:
 {
-  "algorithmName": "Exact algorithm name (e.g. Surrounded Regions (Matrix DFS))",
+  "algorithmName": "Exact algorithm name (e.g. Breadth-First Search (Graph))",
   "structureType": "array" | "graph" | "tree" | "stack" | "queue" | "list" | "array2d" | "heap",
-  "dataStructuresUsed": ["2D Grid / Matrix", "Call Stack (Recursion)"],
+  "dataStructuresUsed": ["Graph (Adjacency List)", "Queue (FIFO)"],
   "structures": [
     {
-      "name": "board (2D Grid)",
-      "type": "array2d",
-      "initialInput": "X O X X\nO X O X\nX O X X"
+      "name": "Graph (Adjacency)",
+      "type": "graph",
+      "initialInput": "1 2\n1 3\n2 3\n3 4"
     },
     {
-      "name": "Call Stack (Recursion)",
-      "type": "stack",
-      "initialInput": "dfs(0,1)"
+      "name": "Queue (FIFO)",
+      "type": "queue",
+      "initialInput": "1"
     }
   ],
   "graphOptions": { "directed": false, "weighted": false },
   "initialInput": "space-separated numbers for array, or matrix rows for array2d, or edges for graph, or values for tree/stack",
-  "complexity": { "time": "O(?)", "space": "O(?)" },
+  "complexity": { "time": "O(V + E)", "space": "O(V)" },
   "summary": "What this code does and which data structures it utilizes in 1-2 sentences",
   "steps": [
     {
@@ -116,9 +148,9 @@ Output MUST be a valid JSON object:
   ]
 }
 
-Note for "structures": Provide 1 to 2 visual structures used by the algorithm (e.g. primary matrix + call stack for recursive DFS; or array + queue for BFS). Each structure type must be one of: "array" | "graph" | "tree" | "stack" | "queue" | "list" | "array2d" | "heap".
-highlightColor values: "#6366f1" (active/current), "#f59e0b" (comparing/modifying), "#10b981" (found/success/safe), "#ef4444" (mismatch/removed/captured)
-highlights: zero-based flat index or coordinate for array2d (e.g. [0, 1] or "[0][1]"), indices for 1D array, node labels for graph/tree.
+Note for "structures": Provide 1 to 2 visual structures used by the algorithm (e.g. primary matrix + call stack for recursive DFS; or graph + queue for BFS). Each structure type must be one of: "array" | "graph" | "tree" | "stack" | "queue" | "list" | "array2d" | "heap".
+highlightColor values: "#6366f1" (active/current), "#f59e0b" (comparing/modifying), "#10b981" (found/success/safe/enqueued), "#ef4444" (mismatch/removed/captured/already_visited)
+highlights: node labels (e.g. ["1", "2"] or ["1-2"]) for graph, zero-based flat index or coordinate for array2d, indices for 1D array, node labels for tree.
 
 Return ONLY the raw JSON. No markdown, no backticks, no extra text.`;
 
@@ -132,7 +164,10 @@ ${code.trim()}
 Analyze this code and detect ALL data structures used (primary and secondary).
 CRITICAL REQUIREMENTS:
 1. Complete Dry-Run: Simulate the ENTIRE algorithm execution from start to finish without skipping or summarizing iterations. Generate as many detailed, granular steps as necessary (35 to 60+ steps) until the algorithm completely finishes.
-2. Real-Time Canvas Mutations: For every step where values in the data structure change (e.g. board[r][c] = '#', swapping array elements, changing 'O' -> 'X'), you MUST specify the 'mutations' array with target (e.g. "[r][c]") and value (e.g. "#", "X") so the board updates in real time on the canvas.`;
+2. GRAPH ACCURACY (BFS/DFS/Dijkstra):
+   - For graph traversals, you MUST accurately maintain and update "visited" (array of visited nodes) and "queue" (exact array of queued nodes in FIFO order) in "variables" on EVERY single step!
+   - When a node is popped from the queue, immediately remove it from "queue". When a neighbor is added to the queue, immediately append it to "queue". When marked visited, immediately add it to "visited" and keep it in all subsequent steps.
+3. Real-Time Canvas Mutations: For every step where values in the data structure change (e.g. board[r][c] = '#', swapping array elements, changing 'O' -> 'X'), you MUST specify the 'mutations' array with target and value so the elements update in real time on the canvas.`;
     let responseJson = null;
     let lastError = null;
 
@@ -246,7 +281,29 @@ CRITICAL REQUIREMENTS:
       }, { status: 503 });
     }
 
-    // 5. Sanitize each step — ensure highlights, mutations, and snapshots are preserved or inferred
+    // 5. Sanitize each step — ensure graph state tracking, highlights, mutations, and snapshots are preserved
+    let lastVisited = [];
+    let lastQueue = [];
+    let lastStack = [];
+    let lastOrder = [];
+
+    const isGraph = responseJson.structureType === "graph" ||
+      responseJson.dataStructuresUsed?.some((ds) => /graph/i.test(ds));
+
+    const parseArrayVal = (val) => {
+      if (Array.isArray(val)) return val;
+      if (typeof val === "string") {
+        const cleaned = val
+          .replace(/^(?:set|deque|list)?\s*[\(\[{]+/, "")
+          .replace(/[\)\]}]+$/, "")
+          .trim();
+        if (!cleaned) return [];
+        return cleaned.split(/[\s,]+/).map((t) => (isNaN(t) ? t : Number(t)));
+      }
+      if (typeof val === "number" || typeof val === "boolean") return [val];
+      return [];
+    };
+
     responseJson.steps = responseJson.steps.map((s, i) => {
       let mutations = Array.isArray(s.mutations)
         ? s.mutations.filter((m) => m && m.value !== undefined)
@@ -276,11 +333,58 @@ CRITICAL REQUIREMENTS:
         }
       }
 
+      // Graph variable hygiene
+      const vars = s.variables && typeof s.variables === "object" ? { ...s.variables } : {};
+      if (isGraph) {
+        // Track visited
+        if (vars.visited !== undefined) {
+          const parsed = parseArrayVal(vars.visited);
+          const merged = new Set([...lastVisited, ...parsed]);
+          vars.visited = Array.from(merged);
+          lastVisited = vars.visited;
+        } else if (lastVisited.length > 0) {
+          vars.visited = [...lastVisited];
+        }
+
+        // Track queue
+        if (vars.queue !== undefined) {
+          vars.queue = parseArrayVal(vars.queue);
+          lastQueue = vars.queue;
+        } else if (lastQueue.length > 0) {
+          vars.queue = [...lastQueue];
+        }
+
+        // Track stack
+        if (vars.stack !== undefined) {
+          vars.stack = parseArrayVal(vars.stack);
+          lastStack = vars.stack;
+        } else if (lastStack.length > 0) {
+          vars.stack = [...lastStack];
+        }
+
+        // Track order
+        if (vars.order !== undefined) {
+          vars.order = parseArrayVal(vars.order);
+          lastOrder = vars.order;
+        } else if (lastOrder.length > 0) {
+          vars.order = [...lastOrder];
+        }
+
+        // Ensure newly visited node in description is captured
+        if (s.description && /visited\.add|mark.*visit/i.test(s.description)) {
+          const nodeVal = vars.nb ?? vars.neighbor ?? vars.node ?? vars.current;
+          if (nodeVal !== undefined && vars.visited && !vars.visited.includes(nodeVal)) {
+            vars.visited = [...vars.visited, nodeVal];
+            lastVisited = vars.visited;
+          }
+        }
+      }
+
       return {
         step: s.step ?? i + 1,
         line: s.line ?? 1,
         description: s.description ?? `Step ${i + 1}`,
-        variables: s.variables && typeof s.variables === "object" ? s.variables : {},
+        variables: vars,
         highlights: Array.isArray(s.highlights) ? s.highlights : [],
         highlightColor: s.highlightColor ?? "#6366f1",
         action: s.action ?? "visit",
