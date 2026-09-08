@@ -7,12 +7,66 @@ const PRIMARY_MODEL = process.env.GEMINI_MODEL || "gemini-3.5-flash";
 const VALID_STRUCTURE_TYPES = ["array", "graph", "tree", "stack", "queue", "list", "array2d", "heap"];
 
 /**
+ * Sanitizes raw control characters (unescaped \n, \r, \t, etc.) inside JSON string literals.
+ * Prevents "Bad control character in string literal in JSON" syntax errors when AI generates
+ * multiline strings for matrices or code snippets.
+ */
+function sanitizeJsonControlChars(str) {
+  let result = "";
+  let inString = false;
+  let escaped = false;
+
+  for (let i = 0; i < str.length; i++) {
+    const ch = str[i];
+
+    if (escaped) {
+      result += ch;
+      escaped = false;
+      continue;
+    }
+
+    if (ch === "\\") {
+      result += ch;
+      escaped = true;
+      continue;
+    }
+
+    if (ch === "\"") {
+      inString = !inString;
+      result += ch;
+      continue;
+    }
+
+    if (inString) {
+      if (ch === "\n") {
+        result += "\\n";
+      } else if (ch === "\r") {
+        result += "\\r";
+      } else if (ch === "\t") {
+        result += "\\t";
+      } else if (ch.charCodeAt(0) < 32) {
+        result += " ";
+      } else {
+        result += ch;
+      }
+    } else {
+      result += ch;
+    }
+  }
+
+  return result;
+}
+
+/**
  * Safely parse JSON from LLMs, automatically recovering from output truncation
- * (e.g., when the token limit is hit mid-string or mid-step).
+ * (e.g., when the token limit is hit mid-string or mid-step) and illegal control chars.
  */
 function repairTruncatedJson(str) {
   if (!str || typeof str !== "string") return null;
-  const cleaned = str.replace(/^```json\s*/i, "").replace(/```\s*$/i, "").trim();
+  let cleaned = str.replace(/^```json\s*/i, "").replace(/```\s*$/i, "").trim();
+
+  // Pre-sanitize any illegal control characters inside string literals (e.g. matrix newlines)
+  cleaned = sanitizeJsonControlChars(cleaned);
 
   // 1. Standard parse first
   try {
